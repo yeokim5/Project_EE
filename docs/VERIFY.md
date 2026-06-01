@@ -35,7 +35,7 @@ ruff check .          # lint
 # optional checks
 python3 scripts/update_project_map.py --check
 mypy earnings_extractor          # only if a real type config exists
-python -m earnings_extractor extract assesment_info --mode live   # dev/demo only, needs API key
+python -m earnings_extractor extract assesment_info --mode live   # optional live check, needs API key
 ```
 
 Live-mode drafts include measured OpenAI token usage in
@@ -77,10 +77,10 @@ python3 scripts/update_project_map.py --check
 
 ## Pass criteria (all must be true)
 
-- [ ] `extract` succeeds in **offline/recorded mode with no API key** and creates draft artifacts — this is the required reviewer path. Live mode is an optional dev/demo check.
+- [ ] `extract` succeeds in **offline/recorded mode with no API key** and creates draft artifacts — this is the required reviewer path. Live mode is an optional API-backed check.
 - [ ] `outputs/run_001/draft_metrics.json`, `outputs/run_001/review_queue.json`, `outputs/run_001/evidence_report.md`, and `outputs/run_001/review.html` all exist.
 - [ ] `review.html` shows every extracted/scored value with source PDF, source page, source quote, confidence/check status, and review status/control.
-- [ ] Recorded/demo mode creates a clearly labeled `review_decisions.json` for deterministic verification; production use requires real human decisions.
+- [ ] Recorded verification mode creates a clearly labeled `review_decisions.json` for deterministic checks; production use requires real human decisions.
 - [ ] Final export requires `review_decisions.json`; unreviewed required fields are refused unless an explicit draft/unreviewed override is used.
 - [ ] `outputs/extractions.json`, `outputs/extractions.xlsx`, and `outputs/extractions.audit.md` all exist after reviewed export.
 - [ ] The first sheet in `outputs/extractions.xlsx` is client-template-compatible with the exact columns from `assesment_info/EarningsSample (1).xlsx`: `Company Name`, `Quarter`, `Total revenue`, `Earnings per share`, `Net income`, `Operating income`, `Gross margin`, `Operating expenses`, `Buybacks and dividends`.

@@ -73,13 +73,13 @@ type DocState = {
 
 type ApiError = { ok: false; error: string };
 
-const demoDocs: Array<{ id: "tesla" | "citi"; label: string }> = [
+const sampleDocs: Array<{ id: "tesla" | "citi"; label: string }> = [
   { id: "tesla", label: "Tesla Q2 2025" },
   { id: "citi", label: "Citi Q1 2025" },
 ];
 
 export default function Home() {
-  const [mode, setMode] = useState<"live" | "demo">("demo");
+  const [mode, setMode] = useState<"live" | "sample">("sample");
   const [files, setFiles] = useState<File[]>([]);
   const [step, setStep] = useState<"upload" | "review">("upload");
   const [docs, setDocs] = useState<DocState[]>([]);
@@ -180,8 +180,8 @@ export default function Home() {
     }
   }
 
-  function runDemo() {
-    void extractAll(demoDocs.map((doc) => ({ kind: "demo", id: doc.id })));
+  function runSample() {
+    void extractAll(sampleDocs.map((doc) => ({ kind: "demo", id: doc.id })));
   }
 
   function runLive() {
@@ -318,11 +318,11 @@ export default function Home() {
 
           <div className="mode-grid" style={{ marginTop: 24, maxWidth: 320 }}>
             <button
-              className={`mode-button ${mode === "demo" ? "active" : ""}`}
-              onClick={() => setMode("demo")}
+              className={`mode-button ${mode === "sample" ? "active" : ""}`}
+              onClick={() => setMode("sample")}
               type="button"
             >
-              <FileText size={18} /> Demo
+              <FileText size={18} /> Samples
             </button>
             <button
               className={`mode-button ${mode === "live" ? "active" : ""}`}
@@ -333,16 +333,16 @@ export default function Home() {
             </button>
           </div>
 
-          {mode === "demo" ? (
+          {mode === "sample" ? (
             <section style={{ marginTop: 20 }}>
               <button
                 className="primary-button"
                 disabled={progress !== null}
-                onClick={runDemo}
+                onClick={runSample}
                 type="button"
               >
                 {progress ? <Loader2 size={18} className="spin" /> : null}
-                {progress ?? "Run demo (Tesla + Citi)"}
+                {progress ?? "Run samples (Tesla + Citi)"}
               </button>
             </section>
           ) : (

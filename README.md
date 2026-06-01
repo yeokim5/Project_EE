@@ -4,6 +4,8 @@ Review-first extraction of standard financial metrics from earnings PDFs and
 earnings-call transcripts, into a client-compatible Excel workbook plus JSON and
 audit artifacts.
 
+[Open the deployed app](https://project-ee-one.vercel.app/)
+
 **This is not just "an LLM extracts numbers."** It is:
 
 > **LLM draft extraction → deterministic validation → citation review → approved Excel export.**
@@ -111,7 +113,7 @@ Cell formatting rules:
 - **Unsupported or unapproved values stay blank** — the tool never guesses a
   number into the client sheet.
 
-A workbook exported from demo or unreviewed decisions is clearly marked as
+A workbook exported from synthetic or unreviewed decisions is clearly marked as
 `DRAFT/UNREVIEWED` (amber tab, comment on the header cell). A "final" workbook
 requires real human review decisions.
 
@@ -127,7 +129,7 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
 
-### CLI demo (no API key required)
+### CLI quickstart (no API key required)
 
 This is the reviewer path. Recorded mode replays committed model responses, so it
 runs deterministically and offline:
@@ -143,10 +145,12 @@ python -m earnings_extractor export outputs/run_001 --decisions outputs/run_001/
 Open `outputs/run_001/review.html` to see the citation review page, and
 `outputs/extractions.xlsx` for the exported workbook.
 
-### Web demo
+### Web app
 
 A Next.js shell wraps the same Python pipeline — it does not reimplement
 extraction, normalization, validation, or export in JavaScript.
+
+Production deployment: <https://project-ee-one.vercel.app/>
 
 ```bash
 # terminal 1: Python API wrapper over the existing extractor/export code
@@ -156,9 +160,10 @@ extraction, normalization, validation, or export in JavaScript.
 PYTHON_API_BASE_URL=http://127.0.0.1:8000 npm run dev -- --port 3000
 ```
 
-Then open `http://localhost:3000`. Demo mode runs the two golden PDFs with no API
-key. Live mode uploads an arbitrary PDF and uses `OPENAI_API_KEY` server-side
-only. Downloaded workbooks from the web UI are explicitly marked draft/unreviewed.
+Then open `http://localhost:3000`. Sample mode runs the two bundled reference
+PDFs with no API key. Upload mode accepts arbitrary PDFs and uses
+`OPENAI_API_KEY` server-side only. Downloaded workbooks from the web UI are
+explicitly marked draft/unreviewed.
 
 ### Run tests and evals
 
@@ -264,7 +269,7 @@ universal average.
   credentials and current model behavior.
 - The web UI exports an explicitly marked unreviewed draft workbook; a full
   inline accept/edit/reject review surface remains future work.
-- Demo and synthetic review decisions are for deterministic verification only;
+- Synthetic review decision files are for deterministic verification only;
   production use requires real human review.
 
 ## Production Path

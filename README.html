@@ -97,7 +97,7 @@
   <p class="tag">Review-first extraction of standard financial metrics from earnings PDFs and call transcripts into a client-ready Excel workbook, with citation review and a full audit trail.</p>
   <div class="pill"><b>LLM draft</b> → deterministic validation → citation review → <b>approved Excel export</b></div>
   <div class="links">
-    <a class="primary" href="REPLACE_WITH_DEMO_LINK">Live Demo</a>
+    <a class="primary" href="https://project-ee-one.vercel.app/">Open App</a>
     <a class="ghost" href="REPLACE_WITH_REPO_LINK">Source Code</a>
   </div>
 </header>
@@ -152,7 +152,7 @@ flowchart TD
     <tr><td><b>Review Decisions</b></td><td>Approve / reject / not-applicable / note record per metric.</td></tr>
     <tr><td><b>Evidence</b></td><td>Source page, quote, confidence, and review-flag reason per metric.</td></tr>
   </table>
-  <p><b>Formatting:</b> revenue / net income / operating income / operating expenses render as <code>$&lt;n&gt;B</code> (stored as USD millions); gross margin as a percentage cell; EPS as a plain number; unsupported or unapproved values stay <b>blank</b> — never guessed. Demo/unreviewed exports are clearly marked <span class="flag">DRAFT/UNREVIEWED</span>.</p>
+  <p><b>Formatting:</b> revenue / net income / operating income / operating expenses render as <code>$&lt;n&gt;B</code> (stored as USD millions); gross margin as a percentage cell; EPS as a plain number; unsupported or unapproved values stay <b>blank</b> — never guessed. Synthetic/unreviewed exports are clearly marked <span class="flag">DRAFT/UNREVIEWED</span>.</p>
 
   <h2>Run it</h2>
   <h3>Setup</h3>
@@ -160,20 +160,21 @@ flowchart TD
 source .venv/bin/activate
 python -m pip install -e ".[dev]"</code></pre>
 
-  <h3>CLI demo — no API key (recorded mode replays committed responses)</h3>
+  <h3>CLI quickstart — no API key (recorded mode replays committed responses)</h3>
   <pre><code>python -m earnings_extractor extract assesment_info --out outputs/run_001 --mode recorded
 python -m earnings_extractor inspect outputs/run_001/draft_metrics.json
 python -m earnings_extractor review outputs/run_001 --out outputs/run_001/review.html --demo-decisions outputs/run_001/review_decisions.json
 python scripts/make_acceptance_decisions.py outputs/run_001 --out outputs/run_001/human_review_decisions.json
 python -m earnings_extractor export outputs/run_001 --decisions outputs/run_001/human_review_decisions.json --out outputs/extractions.xlsx</code></pre>
 
-  <h3>Web demo</h3>
+  <h3>Web app</h3>
+  <p class="muted">Production deployment: <a href="https://project-ee-one.vercel.app/">https://project-ee-one.vercel.app/</a></p>
   <pre><code># terminal 1: Python API over the existing extractor/export code
 .venv/bin/python scripts/web_api_server.py --port 8000
 
 # terminal 2: Next.js frontend, proxying /api/process to the Python API
 PYTHON_API_BASE_URL=http://127.0.0.1:8000 npm run dev -- --port 3000</code></pre>
-  <p class="muted">Open <code>http://localhost:3000</code>. Demo mode runs the two golden PDFs with no API key.</p>
+  <p class="muted">Open <code>http://localhost:3000</code>. Sample mode runs the two bundled reference PDFs with no API key.</p>
 
   <h3>Tests &amp; evals</h3>
   <pre><code>python -m earnings_extractor eval --draft outputs/test_tesla/draft_metrics.json --document-id tesla_q2_2025 --min-accuracy 0.9

@@ -690,14 +690,14 @@ Current state:
 **Status:** [ ] todo  [ ] doing  [x] done (pragmatic draft UI)
 
 **Built now (the pragmatic web shell):** a Next.js UI plus Python API wrapper
-around the existing extractor/export code. The UI supports keyless demo mode for
-Tesla/Citi, live uploaded PDFs when `OPENAI_API_KEY` is available server-side,
+around the existing extractor/export code. The UI supports keyless sample mode
+for Tesla/Citi, uploaded PDFs when `OPENAI_API_KEY` is available server-side,
 metric/source/review-flag rendering, and download of an explicitly marked
 unreviewed draft workbook via `allow_unreviewed=True`.
 
-- `app/` — Next.js App Router UI: mode selector, PDF upload, demo buttons,
+- `app/` — Next.js App Router UI: mode selector, PDF upload, sample buttons,
   metric table with source quotes and review flags, and Excel draft download.
-- `api/process.py` — Vercel Python function candidate. It writes uploaded/demo
+- `api/process.py` — Vercel Python function candidate. It writes uploaded/sample
   PDFs to `/tmp`, calls `earnings_extractor.pipeline.extract()`, creates
   synthetic draft decisions, calls `export_reviewed_run(...,
   allow_unreviewed=True)`, and returns metrics plus a base64 workbook.
@@ -705,9 +705,9 @@ unreviewed draft workbook via `allow_unreviewed=True`.
   `/api/process` shape for development or Render/Railway/Fly deployment.
 - `vercel.json`, `requirements.txt`, `package.json` — deployment/runtime config.
 
-**Verified:** direct Python API demo mode returned 9 Tesla metrics and 9 Citi
+**Verified:** direct Python API sample mode returned 9 Tesla metrics and 9 Citi
 metrics with `Client Template DRAFT` workbooks; browser click-through for Tesla
-demo rendered metrics and downloaded a draft workbook; live Citi upload through
+sample rendered metrics and downloaded a draft workbook; live Citi upload through
 the API returned 9 metrics, a valid draft workbook, and OpenAI usage; `npm run
 build` and `ruff check .` passed.
 
@@ -895,6 +895,11 @@ Run the relevant part of `docs/VERIFY.md` after each meaningful change.
 
 > Format: `YYYY-MM-DD-HH-MM — decision / client answer / assumption changed`
 
+- 2026-06-01-11-19 — Removed product-facing "demo" positioning from the web app
+  and README surfaces. The deployed app is now linked as
+  `https://project-ee-one.vercel.app/`, the UI presents bundled Tesla/Citi files
+  as samples, and internal `is_demo` / `--demo-decisions` wording remains only
+  where it protects export integrity for synthetic verification decisions.
 - 2026-06-01-06-00 — Built Phase 11, the full review-first web UI, as a thin
   shell over the tested core. New serverless functions `api/extract.py` (one PDF
   per call → draft + template metrics + deterministic evidence rects from
