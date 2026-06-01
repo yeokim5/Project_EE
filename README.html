@@ -6,23 +6,25 @@
 <title>Earnings Extractor — Review-First Financial Metric Extraction</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --panel-2: #1c2330;
-    --border: #2a3240;
-    --text: #e6edf3;
-    --muted: #9aa7b4;
-    --accent: #4f9cff;
-    --accent-2: #3fb950;
-    --amber: #d29922;
-    --code-bg: #0b0f15;
+    --bg: #f6f8fb;
+    --panel: #ffffff;
+    --panel-2: #eef3fb;
+    --border: #dce3ee;
+    --text: #172033;
+    --muted: #637083;
+    --accent: #315bdc;
+    --accent-2: #147a4f;
+    --amber: #9a5b00;
+    --code-bg: #f0f4fa;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: var(--bg);
+    background:
+      radial-gradient(1100px 460px at 50% -160px, rgba(49,91,220,0.13), transparent 65%),
+      var(--bg);
     color: var(--text);
     font-family: var(--sans);
     line-height: 1.65;
@@ -32,7 +34,9 @@
   header.hero {
     padding: 64px 24px 40px;
     text-align: center;
-    background: radial-gradient(1200px 400px at 50% -120px, rgba(79,156,255,0.18), transparent);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.9), rgba(246,248,251,0.92)),
+      radial-gradient(1200px 400px at 50% -120px, rgba(49,91,220,0.16), transparent);
     border-bottom: 1px solid var(--border);
   }
   header.hero h1 { font-size: 2.4rem; margin: 0 0 8px; letter-spacing: -0.02em; }
@@ -48,7 +52,7 @@
     text-decoration: none; padding: 10px 20px; border-radius: 8px;
     font-weight: 600; font-size: 0.92rem; border: 1px solid var(--border);
   }
-  .links a.primary { background: var(--accent); color: #04101f; border-color: var(--accent); }
+  .links a.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
   .links a.ghost { background: var(--panel); color: var(--text); }
   h2 {
     margin: 56px 0 18px; font-size: 1.45rem; letter-spacing: -0.01em;
@@ -69,9 +73,9 @@
   pre {
     background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
     padding: 16px 18px; overflow-x: auto; font-family: var(--mono);
-    font-size: 0.85rem; line-height: 1.55; color: #d6dee8;
+    font-size: 0.85rem; line-height: 1.55; color: #243149;
   }
-  code { font-family: var(--mono); font-size: 0.88em; color: #ffd9a0; }
+  code { font-family: var(--mono); font-size: 0.88em; color: #8a4b00; }
   pre code { color: inherit; }
   .mermaid {
     background: var(--panel); border: 1px solid var(--border);
@@ -97,8 +101,8 @@
   <p class="tag">Review-first extraction of standard financial metrics from earnings PDFs and call transcripts into a client-ready Excel workbook, with citation review and a full audit trail.</p>
   <div class="pill"><b>LLM draft</b> → deterministic validation → citation review → <b>approved Excel export</b></div>
   <div class="links">
-    <a class="primary" href="https://project-ee-one.vercel.app/">Open App</a>
-    <a class="ghost" href="REPLACE_WITH_REPO_LINK">Source Code</a>
+    <a class="primary" href="https://project-ee-one.vercel.app/">Live Demo</a>
+    <a class="ghost" href="https://github.com/yeokim5/Project_EE">yeokim5/Project_EE</a>
   </div>
 </header>
 
@@ -202,12 +206,16 @@ ruff check .</code></pre>
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
   mermaid.initialize({
     startOnLoad: true,
-    theme: "dark",
+    theme: "base",
     themeVariables: {
-      primaryColor: "#1c2330",
-      primaryBorderColor: "#2a3240",
-      primaryTextColor: "#e6edf3",
-      lineColor: "#4f9cff",
+      background: "#ffffff",
+      mainBkg: "#ffffff",
+      primaryColor: "#eef3fb",
+      primaryBorderColor: "#dce3ee",
+      primaryTextColor: "#172033",
+      lineColor: "#315bdc",
+      secondaryColor: "#f6f8fb",
+      tertiaryColor: "#f0f4fa",
       fontFamily: "ui-monospace, monospace"
     }
   });

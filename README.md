@@ -4,7 +4,7 @@ Review-first extraction of standard financial metrics from earnings PDFs and
 earnings-call transcripts, into a client-compatible Excel workbook plus JSON and
 audit artifacts.
 
-[Open the deployed app](https://project-ee-one.vercel.app/)
+[Live Demo](https://project-ee-one.vercel.app/)
 
 **This is not just "an LLM extracts numbers."** It is:
 
