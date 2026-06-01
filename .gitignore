@@ -13,3 +13,4 @@ __pycache__/
 outputs/
 *.egg-info/
 .vercel
+job_info

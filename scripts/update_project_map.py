@@ -23,6 +23,7 @@ EXCLUDED_DIRS = {
     "__pycache__",
     "build",
     "dist",
+    "job_info",
     "node_modules",
     "outputs",
 }
