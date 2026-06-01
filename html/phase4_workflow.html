@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Earnings Extractor — Phase 4 Workflow</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2a3340;
+    --txt:#e6edf3; --muted:#9aa7b4; --dim:#6e7d8c;
+    --accent:#58a6ff; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --purple:#bc8cff; --teal:#39c5cf; --pink:#f778ba;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.6;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:21px;margin:48px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:0 0 6px}
+  p{margin:8px 0}
+  .lede{color:var(--muted);font-size:16px;max-width:780px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--panel2);padding:1px 6px;border-radius:5px;color:var(--teal)}
+  .file{color:var(--purple)}
+  .fn{color:var(--accent)}
+  .muted{color:var(--muted)}
+  .grid{display:grid;gap:14px}
+  .banner{background:linear-gradient(135deg,#161b22,#1c2530);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-top:18px}
+  .pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .pill{font-family:var(--mono);font-size:12px;padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+  .pill b{color:var(--accent)}
+
+  /* pipeline */
+  .pipe{display:flex;flex-direction:column;gap:0;margin:18px 0}
+  .stage{display:grid;grid-template-columns:46px 1fr;gap:16px;align-items:stretch}
+  .rail{display:flex;flex-direction:column;align-items:center}
+  .dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700;color:#0e1116;flex:none}
+  .bar{width:2px;flex:1;background:var(--line);min-height:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;position:relative}
+  .card.new{border-color:#5a4a12;background:linear-gradient(180deg,#1a1709,#161b22)}
+  .card .meta{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:6px}
+  .new-flag{position:absolute;top:12px;right:14px;font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:#0e1116;background:var(--amber);padding:2px 7px;border-radius:20px;font-weight:700}
+  .io{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-family:var(--mono);font-size:11.5px}
+  .io span{padding:3px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line)}
+  .io .in{color:var(--amber)} .io .out{color:var(--green)}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  @media(max-width:760px){.two,.three{grid-template-columns:1fr}}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .box.green{border-color:#1f4a2c} .box.red{border-color:#5a2326} .box.amber{border-color:#5a4a12}
+  .wall{position:relative;text-align:center;margin:8px 0}
+
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.5px}
+  .ok{color:var(--green);font-weight:600}
+  .fail{color:var(--red);font-weight:600}
+  .blank{color:var(--amber);font-weight:600}
+
+  .phases{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+  .ph{flex:1;min-width:72px;text-align:center;padding:10px 6px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:12px}
+  .ph.done{border-color:#1f4a2c;background:#10241a}
+  .ph.now{border-color:var(--accent);background:#10243b;box-shadow:0 0 0 1px var(--accent)}
+  .ph .n{font-family:var(--mono);color:var(--dim);font-size:11px}
+  .ph.done .n{color:var(--green)} .ph.now .n{color:var(--accent)}
+  .legend{font-size:12.5px;color:var(--muted);margin-top:10px;display:flex;gap:18px;flex-wrap:wrap}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:5px}
+  .note{font-size:13px;color:var(--muted);background:var(--panel2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;margin-top:12px}
+  .note.amber{border-left-color:var(--amber)}
+  .note.green{border-left-color:var(--green)}
+  .note.red{border-left-color:var(--red)}
+  footer{margin-top:60px;color:var(--dim);font-size:12.5px;text-align:center;border-top:1px solid var(--line);padding-top:18px}
+
+  .flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;margin-top:10px}
+  .flow .step{padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel)}
+  .flow .step.hot{border-color:var(--amber);color:var(--amber)}
+  .flow .arrow{color:var(--dim)}
+  .kv{font-family:var(--mono);font-size:12.5px;margin-top:6px}
+  .kv b{color:var(--txt)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">PHASE 4 · TRUST, NORMALIZE &amp; RUN OFFLINE</span>
+  <h1>Earnings Extractor — Phase 4, explained</h1>
+  <p class="lede">Phase 3 proved the machine could read a PDF and pull out metrics. But it only worked well on a clean Tesla <i>report</i> (9/9), and it needed an API key to run at all. <b>Phase 4 is the trust-and-reliability layer.</b> It makes every number consistent, checks every claim against its own evidence, guarantees the output always has all nine client fields, deterministically nails the company name, and lets a reviewer run the whole thing <b>with no API key</b>. This page walks the whole project as it stands now, and shows exactly what Phase 4 bolted on.</p>
+
+  <div class="banner">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="pill"><b>Theme:</b> make the draft trustworthy &amp; reproducible</span>
+      <span class="pill">New: <b style="color:var(--amber)">offline / recorded mode</b></span>
+      <span class="pill">New: normalize · identity · consistency checks</span>
+      <span class="pill">Next → Phase 5: <b style="color:var(--accent)">human review UI</b></span>
+    </div>
+  </div>
+
+  <!-- ======================= 30 SECOND RECAP ======================= -->
+  <h2>If you read nothing else</h2>
+  <p>The project is a <b>review-first earnings extractor</b>. You give it an earnings PDF; it returns a draft of nine financial metrics, and <b>every value is tied to the exact quote and page it came from</b>. It never blindly trusts itself — anything weak or missing is flagged for a human. There are two walled-off worlds: the <code class="file">earnings_extractor/</code> package that does the work, and the <code class="file">evaluation/</code> package that grades it against a hand-verified answer key. The extractor is forbidden from importing the answer key (a test enforces this), so a good score can only come from actually reading the document.</p>
+  <p><b>Phase 4's job</b> was everything between "the model returned some metrics" and "a human can trust the draft": clean up the numbers, fill in the template, confirm the company, fact-check each quote, and make it all runnable offline.</p>
+
+  <!-- ======================= WHAT PHASE 4 ADDED ======================= -->
+  <h2>The five things Phase 4 added</h2>
+  <div class="three">
+    <div class="box amber">
+      <h3>🎞️ Offline mode</h3>
+      <p class="muted" style="font-size:13px"><code class="file">recorded.py</code> — replays a saved model response from a JSON "cassette" so a reviewer can run the pipeline with <b>no OpenAI key</b>. <code>--mode recorded</code>.</p>
+    </div>
+    <div class="box amber">
+      <h3>🧮 Normalization</h3>
+      <p class="muted" style="font-size:13px"><code class="file">normalize.py</code> — forces every number into one canonical unit. <code>$21.6B</code>, <code>"4.1 billion"</code>, and <code>13400</code> all become millions of USD.</p>
+    </div>
+    <div class="box amber">
+      <h3>🆔 Company identity</h3>
+      <p class="muted" style="font-size:13px"><code class="file">identity.py</code> — works out the company name deterministically (no AI) from titles, PDF metadata and filename, and demands on-page proof.</p>
+    </div>
+    <div class="box amber">
+      <h3>📋 Template completion</h3>
+      <p class="muted" style="font-size:13px"><code class="fn">complete_template_rows()</code> — guarantees all nine client fields exist as rows, inserting blank, review-flagged placeholders for any the model missed.</p>
+    </div>
+    <div class="box amber">
+      <h3>✅ Consistency checks</h3>
+      <p class="muted" style="font-size:13px"><code class="fn">validate_metrics()</code> — flags low confidence, checks each quote really appears on its cited page, and reconciles cash-flow math.</p>
+    </div>
+    <div class="box">
+      <h3 class="muted">Carried over from Phase 3</h3>
+      <p class="muted" style="font-size:13px">PDF ingest, no-AI document classification, page selection, structured LLM extraction with evidence, schema validation — all still here, now feeding the new layer.</p>
+    </div>
+  </div>
+
+  <!-- ======================= PIPELINE ======================= -->
+  <h2>The full pipeline now — one PDF, end to end</h2>
+  <p class="muted">This runs on <code>python3 -m earnings_extractor extract &lt;pdf&gt; --out … --mode recorded</code> (or <code>--mode live</code>). Orchestrated by <code class="fn">extract()</code> in <code class="file">pipeline.py</code>. Yellow cards are <b>new in Phase 4</b>; they all sit <i>after</i> the model has spoken and exist to make its output trustworthy.</p>
+
+  <div class="pipe">
+
+    <!-- 1 ingest -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--teal)">1</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Read the PDF → page text (+ metadata)</h3>
+        <p class="muted" style="font-size:13.5px">Pulls plain text from every page (real 1-based page numbers preserved) and now also reads the PDF's embedded <b>metadata</b> — author, creator — which the identity step uses as a clue.</p>
+        <div class="meta"><span class="file">ingest.py</span> → <span class="fn">read_pdf_pages()</span>, <span class="fn">read_pdf_metadata()</span></div>
+        <div class="io"><span class="in">in: PDF file</span><span class="out">out: page text + page numbers + metadata</span></div>
+      </div>
+    </div>
+
+    <!-- 2 classify -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--accent)">2</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Classify the document — no AI</h3>
+        <p class="muted" style="font-size:13.5px">Formal <b>earnings report</b> (dense tables) or <b>earnings call transcript</b> (people speaking)? Decided purely from generic signals — numeric density, accounting phrases, speaker-turn patterns. Phase 4 also teaches it to mark non-source PDFs (job descriptions, the assignment brief) as <code>unknown</code> so they're skipped.</p>
+        <div class="meta"><span class="file">classify.py</span> → <span class="fn">classify_document()</span></div>
+        <div class="io"><span class="out">earnings_report</span><span class="out">earnings_call_transcript</span><span class="out">unknown → skipped</span></div>
+      </div>
+    </div>
+
+    <!-- 3 select -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--accent)">3</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Pick the pages worth reading</h3>
+        <p class="muted" style="font-size:13.5px">Ranks pages by <code>numeric_density + 2 × marker_hits</code> and keeps the top handful (page 1 always kept for identity). A 30-page PDF gets narrowed to its few metric-rich pages before any model sees it.</p>
+        <div class="meta"><span class="file">classify.py</span> → <span class="fn">select_extraction_pages()</span></div>
+        <div class="io"><span class="in">in: all pages</span><span class="out">out: ~6 highest-signal pages</span></div>
+      </div>
+    </div>
+
+    <!-- 4 extract -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--pink)">4</div><div class="bar"></div></div>
+      <div class="card new">
+        <span class="new-flag">PH4</span>
+        <h3>Extract — live model <i>or</i> recorded cassette</h3>
+        <p class="muted" style="font-size:13.5px">Same structured extraction as Phase 3 (the model must return data in our exact schema, with a source quote for every metric, or <code>null</code> + needs_review). <b>New:</b> a <code>mode</code> switch. <code>live</code> calls OpenAI; <code>recorded</code> replays a saved JSON response from <code class="file">recorded_responses/&lt;pdf&gt;.json</code> so the pipeline runs identically with <b>no API key</b>. If no cassette exists for that PDF, it fails loudly rather than silently faking an answer.</p>
+        <div class="meta"><span class="file">extractor.py</span> · <span class="file">recorded.py</span> → <span class="fn">extract_metrics_recorded()</span></div>
+        <div class="io"><span class="in">in: selected page text</span><span class="out">out: MetricsBatch (raw model output)</span></div>
+      </div>
+    </div>
+
+    <!-- 5 template completion -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--amber)">5</div><div class="bar"></div></div>
+      <div class="card new">
+        <span class="new-flag">PH4</span>
+        <h3>Complete the template — fill the gaps</h3>
+        <p class="muted" style="font-size:13.5px">The client workbook always needs the <b>same nine fields</b>. If the model didn't return one (say it found no operating income in a bank transcript), this inserts a <b>blank placeholder row</b> — value <code>null</code>, <code>needs_review = true</code>, with a plain-English reason — instead of leaving a hole. The output shape is now guaranteed.</p>
+        <div class="meta"><span class="file">validation.py</span> → <span class="fn">complete_template_rows()</span></div>
+        <div class="io"><span class="in">in: model rows</span><span class="out">out: all 9 template fields present</span></div>
+      </div>
+    </div>
+
+    <!-- 6 identity -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--amber)">6</div><div class="bar"></div></div>
+      <div class="card new">
+        <span class="new-flag">PH4</span>
+        <h3>Resolve the company — deterministically</h3>
+        <p class="muted" style="font-size:13.5px">The company name isn't left to the model's guess. A no-AI resolver tries, in order: a transcript title (<code>"Citi First Quarter 2025 Earnings Call"</code>), then PDF metadata, then the filename — and each candidate must be <b>found verbatim on a real page</b> to count as confident. Tesla resolves to page 3 with confidence; anything only inferred from metadata stays review-flagged.</p>
+        <div class="meta"><span class="file">identity.py</span> → <span class="fn">resolve_company_identity()</span>, <span class="fn">apply_company_identity()</span></div>
+        <div class="io"><span class="in">in: pages + metadata + filename</span><span class="out">out: Company Name row w/ evidence</span></div>
+      </div>
+    </div>
+
+    <!-- 7 normalize -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--amber)">7</div><div class="bar"></div></div>
+      <div class="card new">
+        <span class="new-flag">PH4</span>
+        <h3>Normalize every number to one unit</h3>
+        <p class="muted" style="font-size:13.5px">Currency fields → <b>USD millions</b> (so <code>$21.6B</code>, <code>"4.1 billion"</code>, and <code>13400</code> become <code>21600</code>, <code>4100</code>, <code>13400</code>). Margins → <b>percentage points</b>. EPS → <b>USD/share</b>. Parentheses become negatives; capex is stored as a positive magnitude. If a value can't be parsed, it's flagged rather than mangled.</p>
+        <div class="meta"><span class="file">normalize.py</span> → <span class="fn">normalize_metrics()</span></div>
+        <div class="io"><span class="in">in: messy values + units</span><span class="out">out: canonical numbers</span></div>
+      </div>
+    </div>
+
+    <!-- 8 validate -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--amber)">8</div><div class="bar"></div></div>
+      <div class="card new">
+        <span class="new-flag">PH4</span>
+        <h3>Consistency checks — fact-check the model</h3>
+        <p class="muted" style="font-size:13.5px">Three deterministic guards: (a) any metric below <code>0.75</code> confidence is flagged; (b) every populated value's <b>source quote must actually appear on the page it cites</b> — if it doesn't, that's a hallucination signal and the row is flagged; (c) a <b>cash-flow reconciliation</b>: operating cash flow − capex should equal free cash flow within tolerance, else all three are flagged.</p>
+        <div class="meta"><span class="file">validation.py</span> → <span class="fn">validate_metrics()</span>, <span class="fn">check_free_cash_flow()</span></div>
+        <div class="io"><span class="in">in: normalized rows + page text</span><span class="out">out: rows with honest review flags</span></div>
+      </div>
+    </div>
+
+    <!-- 9 save -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--green)">9</div></div>
+      <div class="card">
+        <h3>Assemble &amp; save the draft</h3>
+        <p class="muted" style="font-size:13.5px">Everything is packed into a <code>DraftRun</code> audit record — run id, UTC timestamp, mode, model, pages chosen, classification, and all metric rows — written to disk as JSON. <code>inspect</code> can then summarize it ("With evidence: 8/9", "Needs review: 3/9").</p>
+        <div class="meta"><span class="file">pipeline.py</span> → <span class="file">outputs/&lt;run&gt;/draft_metrics.json</span></div>
+        <div class="io"><span class="out">out: draft_metrics.json</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note amber"><b>How to read this:</b> stages 1–4 are about <i>getting</i> a draft (Phase 3's territory, plus the recorded-mode switch). Stages 5–8 are about <i>trusting</i> that draft — they are the heart of Phase 4. The model gives a first guess; the deterministic layer cleans it, completes it, and fact-checks it before any human sees it.</p></div>
+
+  <!-- ======================= RECORDED MODE DEEPER ======================= -->
+  <h2>Offline mode, a little deeper (the "cassette" idea)</h2>
+  <p class="muted">Borrowed from how tests record HTTP calls and replay them. The point: a reviewer should be able to reproduce the exact pipeline output without paying for, or holding a key to, the OpenAI API.</p>
+  <div class="two">
+    <div class="box">
+      <h3 style="color:var(--accent)">live mode</h3>
+      <div class="flow">
+        <span class="step">PDF</span><span class="arrow">→</span>
+        <span class="step hot">OpenAI call</span><span class="arrow">→</span>
+        <span class="step">MetricsBatch</span>
+      </div>
+      <p class="muted" style="font-size:13px;margin-top:10px">Needs <code>OPENAI_API_KEY</code>. Real model, real cost, fresh answer each run.</p>
+    </div>
+    <div class="box amber">
+      <h3 style="color:var(--amber)">recorded mode</h3>
+      <div class="flow">
+        <span class="step">PDF</span><span class="arrow">→</span>
+        <span class="step hot">read JSON cassette</span><span class="arrow">→</span>
+        <span class="step">MetricsBatch</span>
+      </div>
+      <p class="muted" style="font-size:13px;margin-top:10px">No key, no network. The saved response is loaded and run through the <i>same</i> repair + Phase-4 layers. Missing cassette → <code>FileNotFoundError</code>, never a fake.</p>
+    </div>
+  </div>
+  <div class="kv muted"><b>Cassettes on disk:</b> <code class="file">recorded_responses/TSLA-Q2-2025-Update.pdf.json</code>, <code class="file">recorded_responses/citi_earnings_q12025.pdf.json</code></div>
+
+  <!-- ======================= WHY THIS MATTERS ======================= -->
+  <h2>Why these five pieces, specifically</h2>
+  <p>Phase 3 ended with an honest weakness: the Tesla <i>report</i> scored 9/9 but the Citi <i>transcript</i> scored 4/9, because numbers in spoken sentences ("on $21.6 billion of revenues…") are easy to misread, and the company name / units were inconsistent. Phase 4 attacks the <b>reliability</b> side of that gap rather than just tuning the prompt:</p>
+  <table>
+    <tr><th>Phase 4 piece</th><th>Problem it fixes</th></tr>
+    <tr><td class="mono">normalize.py</td><td>"$21.6B" vs "21600" vs "21.6 billion" — same fact, three forms. Grading and export need one canonical number.</td></tr>
+    <tr><td class="mono">identity.py</td><td>Company name was guessed inconsistently. Now resolved deterministically and only trusted when proven on a page.</td></tr>
+    <tr><td class="mono">complete_template_rows</td><td>A missing field used to vanish. Now every client field always exists, blank-but-flagged if unsupported.</td></tr>
+    <tr><td class="mono">validate_metrics</td><td>A confident-looking number with a quote that isn't actually on the cited page is a hallucination. Now caught.</td></tr>
+    <tr><td class="mono">recorded.py</td><td>The required deliverable is a keyless, reproducible run for reviewers. Cassettes make the pipeline deterministic.</td></tr>
+  </table>
+  <div class="note green">The unifying rule: <b>the deterministic layer can flag, complete, and reformat — but it never invents a value.</b> Blank stays blank (and flagged); a number only changes form, never substance. That's what keeps the "review-first" promise honest.</div>
+
+  <!-- ======================= ONE ROW ======================= -->
+  <h2>What one metric row carries through all this</h2>
+  <p class="muted">Every row is a <code class="fn">MetricRow</code> (in <code class="file">schema.py</code>). Phase 4 touches the value/unit/scale (normalize), the source fields (identity, quote check), and the review fields (completion + checks) — but the contract stays the same: a value is only worth anything if it carries its evidence.</p>
+  <div class="box">
+    <table>
+      <tr><th>Field</th><th>Who sets / touches it in Phase 4</th></tr>
+      <tr><td class="mono">metric_name</td><td>template completion guarantees all nine exist</td></tr>
+      <tr><td class="mono">value / unit / scale</td><td><b>normalize.py</b> — canonical USD millions, pp, USD/share</td></tr>
+      <tr><td class="mono">company / ticker</td><td><b>identity.py</b> — deterministic, evidence-backed</td></tr>
+      <tr><td class="mono">source_page / source_quote</td><td><b>validate_metrics</b> confirms the quote is really on that page</td></tr>
+      <tr><td class="mono">confidence</td><td>below 0.75 → auto review flag</td></tr>
+      <tr><td class="mono">needs_review / review_reason</td><td>set by completion, identity, and every consistency check</td></tr>
+    </table>
+  </div>
+
+  <!-- ======================= TESTS ======================= -->
+  <h2>How Phase 4 is proven</h2>
+  <p class="muted"><code class="file">tests/test_phase4_processing.py</code> locks in the new behavior so it can't silently regress. A sample of what it asserts:</p>
+  <div class="two">
+    <div class="box">
+      <h3>Reproducibility &amp; shape</h3>
+      <p class="muted" style="font-size:13px">Recorded Tesla emits exactly the nine template rows; an un-cassetted PDF in recorded mode fails clearly; completion inserts schema-safe blank placeholders.</p>
+    </div>
+    <div class="box">
+      <h3>Numbers &amp; evidence</h3>
+      <p class="muted" style="font-size:13px">Billions/millions normalize correctly; margins, EPS and capex normalize; a fabricated quote not on its cited page gets flagged; cash-flow reconciliation passes and fails as expected.</p>
+    </div>
+  </div>
+  <div class="note">The original guards still hold too: the <b>no-cheat wall</b> (<code class="file">test_no_cheat_imports.py</code>) still fails the build if the extractor imports the answer key, so a high score can't come from peeking.</div>
+
+  <!-- ======================= PHASES ======================= -->
+  <h2>Where this sits in the plan</h2>
+  <div class="phases">
+    <div class="ph done"><div class="n">0–2</div>scaffold</div>
+    <div class="ph done"><div class="n">3 ✓</div>core pipeline</div>
+    <div class="ph now"><div class="n">4 ▸ now</div>trust + offline</div>
+    <div class="ph"><div class="n">5</div>human review</div>
+    <div class="ph"><div class="n">6</div>export</div>
+    <div class="ph"><div class="n">7</div>≥90% gate</div>
+    <div class="ph"><div class="n">8–9</div>polish</div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch" style="background:#10241a;border:1px solid #1f4a2c"></span>done</span>
+    <span><span class="swatch" style="background:#10243b;border:1px solid var(--accent)"></span>current</span>
+    <span><span class="swatch" style="background:var(--panel);border:1px solid var(--line)"></span>upcoming</span>
+  </div>
+  <p style="margin-top:16px"><b>Phase 4 goal (met):</b> a draft you can trust and reproduce — every number canonical, every template field present, every quote fact-checked against its page, and the whole pipeline runnable offline. <b>Next, Phase 5:</b> turn those <code>needs_review</code> flags into an actual <b>human review step</b> — a review queue, a <code>review.html</code> a person clicks through, and a <code>review_decisions.json</code> that records approve/reject — so the draft becomes a reviewed, sign-off-ready result before the final Excel export in Phase 6.</p>
+
+  <footer>Generated for the Strange Loop earnings-extractor · Phase 4 · reflects the actual code in <code>earnings_extractor/</code> &amp; <code>tests/test_phase4_processing.py</code></footer>
+
+</div>
+</body>
+</html>

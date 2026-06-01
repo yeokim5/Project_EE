@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Earnings Extractor — Reliability Hardening + Pixel-Accurate Citations</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2a3340;
+    --txt:#e6edf3; --muted:#9aa7b4; --dim:#6e7d8c;
+    --accent:#58a6ff; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --purple:#bc8cff; --teal:#39c5cf; --pink:#f778ba;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.6;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:21px;margin:48px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:0 0 6px}
+  p{margin:8px 0}
+  .lede{color:var(--muted);font-size:16px;max-width:840px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--panel2);padding:1px 6px;border-radius:5px;color:var(--teal)}
+  .file{color:var(--purple)}
+  .fn{color:var(--accent)}
+  .muted{color:var(--muted)}
+  .banner{background:linear-gradient(135deg,#161b22,#1c2530);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-top:18px}
+  .pill{font-family:var(--mono);font-size:12px;padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel);display:inline-block;margin:3px 2px}
+  .pill b{color:var(--accent)}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  @media(max-width:760px){.two,.three{grid-template-columns:1fr}}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .box.green{border-color:#1f4a2c} .box.red{border-color:#5a2326} .box.amber{border-color:#5a4a12}
+  .box .meta{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:8px}
+
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.5px}
+  .ok{color:var(--green);font-weight:600}
+  .fail{color:var(--red);font-weight:600}
+  .blank{color:var(--amber);font-weight:600}
+
+  .phases{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+  .ph{flex:1;min-width:72px;text-align:center;padding:10px 6px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:12px}
+  .ph.done{border-color:#1f4a2c;background:#10241a}
+  .ph.now{border-color:var(--accent);background:#10243b;box-shadow:0 0 0 1px var(--accent)}
+  .ph.stretch{border-color:#4a3a6a;background:#1a1426}
+  .ph .n{font-family:var(--mono);color:var(--dim);font-size:11px}
+  .ph.done .n{color:var(--green)} .ph.now .n{color:var(--accent)} .ph.stretch .n{color:var(--purple)}
+  .legend{font-size:12.5px;color:var(--muted);margin-top:10px;display:flex;gap:18px;flex-wrap:wrap}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:5px}
+  .note{font-size:13px;color:var(--muted);background:var(--panel2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;margin-top:12px}
+  .note.amber{border-left-color:var(--amber)}
+  .note.green{border-left-color:var(--green)}
+  .note.red{border-left-color:var(--red)}
+  .note.purple{border-left-color:var(--purple)}
+  footer{margin-top:60px;color:var(--dim);font-size:12.5px;text-align:center;border-top:1px solid var(--line);padding-top:18px}
+
+  .flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;margin-top:10px}
+  .flow .step{padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel)}
+  .flow .step.hot{border-color:var(--amber);color:var(--amber)}
+  .flow .step.gd{border-color:#1f4a2c;color:var(--green)}
+  .flow .arrow{color:var(--dim)}
+
+  .term{background:#0a0d12;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:12.5px;overflow-x:auto;margin-top:10px}
+  .term .cmd{color:var(--teal)} .term .cmt{color:var(--dim)} .term .out{color:var(--muted)}
+  .term .gd{color:var(--green)} .term .am{color:var(--amber)} .term .bad{color:var(--red)}
+
+  /* mini pdf mock */
+  .pdfmock{display:grid;grid-template-columns:1.1fr .9fr;gap:0;margin-top:12px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .pdfside{background:#e9ebef;padding:14px}
+  .paper{background:#fff;color:#1f2328;border-radius:4px;padding:14px;font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,.25);position:relative}
+  .paper .ln{height:7px;background:#dde1e6;border-radius:2px;margin:6px 0}
+  .paper .ln.s{width:55%} .paper .ln.m{width:80%}
+  .paper .hit{background:rgba(255,214,0,.45);outline:1px solid rgba(214,158,0,.9);border-radius:2px;color:#1f2328;font-family:var(--mono);font-weight:700;padding:1px 3px;display:inline-block}
+  .citside{background:var(--panel);padding:14px}
+  .citrow{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px}
+  .citrow.active{border-color:var(--accent);background:#10243b}
+  .citrow .cn{font-weight:600} .citrow .cv{float:right;font-family:var(--mono);color:var(--teal)}
+  .citrow .cm{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">SESSION RECAP · RELIABILITY + CITATIONS</span>
+  <h1>What just changed, and where you are</h1>
+  <p class="lede">Two pieces of work in this session. <b>(1) Reliability hardening</b> so the extractor handles <i>any</i> in-scope earnings PDF and company, not just Tesla and Citi. <b>(2) Pixel-accurate citations</b> — a deterministic locator plus a standalone viewer that highlights the exact source text behind every number. The first is core product; the second is the reusable foundation of the post-submission Phase 10 UI, built early because you asked for highlighting.</p>
+
+  <div class="banner">
+    <span class="pill"><b>Done:</b> reliability hardening</span>
+    <span class="pill"><b>Done:</b> citation locator + viewer</span>
+    <span class="pill">Tests: <b style="color:var(--green)">74 passed</b></span>
+    <span class="pill"><b>ruff</b> clean · <b>map</b> clean</span>
+    <span class="pill">Next → <b style="color:var(--accent)">Phase 8: docs + cost</b></span>
+  </div>
+
+  <!-- ============ PART 1 ============ -->
+  <h2>Part 1 — Reliability: works on any document &amp; company</h2>
+  <p class="muted">An unseen-company smoke test (Netflix) failed with <code>"No supported earnings PDFs found"</code>. Root cause wasn't the LLM — it was three deterministic gaps. Each fixed with a narrow, tested heuristic. No company-specific tokens, no full LLM rewrite (which would have broken recorded mode, the keyless eval gate, and the sub-$5/PDF cost story).</p>
+
+  <div class="three">
+    <div class="box amber">
+      <h3>📄 Whole-document scan</h3>
+      <p class="muted" style="font-size:13px">The classifier only checked the first 6 pages for financial statements, so back-loaded shareholder letters (Netflix: statements on pages 9, 11–14) were dropped as <code>unknown</code>. Now it scans <b>all</b> pages.</p>
+      <div class="meta">classify.py · has_statement → full_text</div>
+    </div>
+    <div class="box amber">
+      <h3>🎙️ Structural transcript gate</h3>
+      <p class="muted" style="font-size:13px">A lone mention of "earnings call" could flip a report into a transcript. Now it requires <b>structure</b>: speaker turns + an <code>operator:</code> line, or the phrase backed by ≥2 speaker turns. Citi still classifies right via its real structure.</p>
+      <div class="meta">classify.py · has_transcript_structure</div>
+    </div>
+    <div class="box amber">
+      <h3>🔢 Thousands scale</h3>
+      <p class="muted" style="font-size:13px">Smaller filers report "$ in thousands"; those values came out 1000× too large. Normalization now divides the <code>thousands</code>/<code>k</code> scale down to the canonical USD-millions basis.</p>
+      <div class="meta">normalize.py · thousands / k</div>
+    </div>
+  </div>
+
+  <div class="note green"><b>Result:</b> Netflix and any back-loaded letter now classify, select the right statement pages, and extract. Covered by new tests in <code class="file">tests/test_classify.py</code> and <code class="file">tests/test_phase4_processing.py</code>. Tesla and Citi eval stay <b>9/9</b>.</div>
+
+  <div class="note amber"><b>Open item — third golden doc (Netflix):</b> deliberately <i>not</i> committed to the eval set yet. Seven of nine fields are clean (revenue 10543, EPS 6.61, net income 2890, operating income 3347, buybacks $3.5B / 3.7M shares, company, quarter). Two are judgment calls needing your confirmation: <b>Gross margin</b> (Netflix reports operating margin, not gross — proposed blank/review) and <b>Operating expenses</b> (no single stated line — proposed blank/review). Activating it also needs a live-recorded cassette.</div>
+
+  <!-- ============ PART 2 ============ -->
+  <h2>Part 2 — Pixel-accurate citations</h2>
+  <p class="muted">Every number already carried a source page + quote, machine-verified to be present on that page. This adds the <i>visual</i> layer: the exact rectangle on the page, derived deterministically — the LLM never produces coordinates.</p>
+
+  <div class="flow">
+    <span class="step">stored page + quote</span><span class="arrow">+</span>
+    <span class="step">original PDF</span><span class="arrow">→</span>
+    <span class="step hot">PyMuPDF search_for</span><span class="arrow">→</span>
+    <span class="step gd">rect(s) on page</span><span class="arrow">→</span>
+    <span class="step gd">scaled highlight</span>
+  </div>
+
+  <div class="pdfmock">
+    <div class="pdfside">
+      <div class="paper">
+        <div class="ln m"></div><div class="ln s"></div>
+        <div style="margin:8px 0">Total revenues <span class="hit">25,500 25,182 22,496</span></div>
+        <div class="ln m"></div><div class="ln"></div><div class="ln s"></div>
+        <div class="ln m"></div>
+      </div>
+    </div>
+    <div class="citside">
+      <div class="citrow active"><span class="cv">$22.5B</span><span class="cn">Total revenue</span><div class="cm">page 4 · conf 0.99 · ok</div></div>
+      <div class="citrow"><span class="cv">$1.2B</span><span class="cn">Net income</span><div class="cm">page 4 · conf 0.99 · ok</div></div>
+      <div class="citrow"><span class="cv">—</span><span class="cn">Buybacks and dividends</span><div class="cm">page 1 · no on-page match</div></div>
+    </div>
+  </div>
+  <div class="note">Click a metric on the right → the viewer scrolls to the cited page and draws the highlight over the supporting text. Highlights are stored as <b>fractions of page size</b>, so they stay aligned at any zoom.</div>
+
+  <h3 style="margin-top:20px">What was added</h3>
+  <table>
+    <tr><th>File</th><th>What it is</th></tr>
+    <tr><td class="mono file">earnings_extractor/locate.py</td><td><code class="fn">locate_evidence_bbox(pdf, page, quote)</code> → rects + page size. PyMuPDF <code>search_for</code> with chunked + numeric-anchor fallbacks for quotes that wrap or have odd whitespace. <b>Additive</b> — no change to extraction, schema, or recorded mode.</td></tr>
+    <tr><td class="mono file">scripts/build_citation_viewer.py</td><td>Generates a self-contained HTML per draft (PDF embedded, PDF.js from CDN). Read-only viewer over a finished draft.</td></tr>
+    <tr><td class="mono file">tests/test_locate.py</td><td>4 tests: known quote → rect on correct page; wrapped statement line resolves; absent quote → no rects; out-of-range page → empty.</td></tr>
+  </table>
+  <div class="note green"><b>On real data:</b> 11/12 Tesla citations and 9/9 Citi citations resolved to highlights. The one Tesla miss is the intentionally-blank buyback placeholder — correctly badged "no on-page match" rather than faked.</div>
+
+  <h3 style="margin-top:20px">Build a viewer yourself</h3>
+  <div class="term">
+<span class="cmt"># recorded mode — no API key needed</span><br>
+<span class="cmd">python -m earnings_extractor extract assesment_info/citi_earnings_q12025.pdf --out outputs/test_citi --mode recorded</span><br>
+<span class="cmd">python scripts/build_citation_viewer.py \</span><br>
+<span class="cmd">&nbsp;&nbsp;--draft outputs/test_citi/draft_metrics.json \</span><br>
+<span class="cmd">&nbsp;&nbsp;--pdf assesment_info/citi_earnings_q12025.pdf \</span><br>
+<span class="cmd">&nbsp;&nbsp;--out outputs/citations_citi.html</span><br>
+<span class="out"># open outputs/citations_citi.html → click a metric → highlight lands on its number</span>
+  </div>
+
+  <div class="note purple"><b>Scope honesty:</b> this is the <i>read-only viewer slice</i> of Phase 10 — the reusable foundation. The full interactive app (browser upload, live per-stage pipeline, in-UI review + export, FastAPI/Streamlit backend) is still <b>post-submission</b>. The viewer renders a finished draft; it does not upload, extract, or export.</div>
+
+  <!-- ============ DOCS ============ -->
+  <h2>Docs kept in sync</h2>
+  <table>
+    <tr><th>Doc</th><th>Update</th></tr>
+    <tr><td class="mono file">docs/DECISIONS.md</td><td>Two new entries: the reliability heuristics + the deferred Netflix golden; the citation-locator decision (why PyMuPDF, why viewer-first).</td></tr>
+    <tr><td class="mono file">docs/PROCESS.md</td><td>Phase 10 status → "doing (foundation slice only)"; decision-log entries for both pieces of work.</td></tr>
+    <tr><td class="mono file">docs/VERIFY.md</td><td>Best-effort section now lists the locator test + viewer build commands.</td></tr>
+    <tr><td class="mono file">docs/PROJECT_MAP.md</td><td>Regenerated — includes <code>locate.py</code>, <code>build_citation_viewer.py</code>, <code>test_locate.py</code>.</td></tr>
+    <tr><td class="mono file">pyproject.toml</td><td>Added runtime dependency <code>pymupdf&gt;=1.24</code>.</td></tr>
+  </table>
+
+  <!-- ============ WHERE YOU ARE ============ -->
+  <h2>Where you are in the plan</h2>
+  <div class="phases">
+    <div class="ph done"><div class="n">0–2</div>scaffold</div>
+    <div class="ph done"><div class="n">3 ✓</div>core</div>
+    <div class="ph done"><div class="n">4 ✓</div>trust+offline</div>
+    <div class="ph done"><div class="n">5 ✓</div>review</div>
+    <div class="ph done"><div class="n">6 ✓</div>export</div>
+    <div class="ph done"><div class="n">7 ✓</div>eval gate</div>
+    <div class="ph now"><div class="n">8 ▸ next</div>docs + cost</div>
+    <div class="ph"><div class="n">9</div>audit + submit</div>
+    <div class="ph stretch"><div class="n">10 ◐</div>UI (slice)</div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch" style="background:#10241a;border:1px solid #1f4a2c"></span>done</span>
+    <span><span class="swatch" style="background:#10243b;border:1px solid var(--accent)"></span>next</span>
+    <span><span class="swatch" style="background:#1a1426;border:1px solid #4a3a6a"></span>post-submission (foundation started)</span>
+  </div>
+
+  <div class="note"><b>Next up — Phase 8 (Documentation + Cost):</b> write the <code class="file">README.md</code> a stranger can run from, flesh out <code class="file">docs/SYSTEM_DESIGN_NOTES.md</code>, and add a cost-per-PDF estimate compared to the $3.33–$5.00/PDF analyst baseline. Then Phase 9 is the final audit + submission.</div>
+
+  <div class="note red"><b>Before you move on:</b> these changes are <b>uncommitted</b>. Commit from your own terminal (the sandbox can't write <code>.git</code>) and re-run <code>pip install -e ".[dev]"</code> to pick up the new <code>pymupdf</code> dependency.</div>
+
+  <footer>Generated for the Strange Loop earnings-extractor · reflects the actual code in <code>earnings_extractor/locate.py</code>, <code>classify.py</code>, <code>normalize.py</code>, <code>scripts/build_citation_viewer.py</code> &amp; <code>tests/test_locate.py</code></footer>
+
+</div>
+</body>
+</html>

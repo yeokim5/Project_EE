@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Earnings Extractor — Review-First Financial Metric Extraction</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #2a3240;
+    --text: #e6edf3;
+    --muted: #9aa7b4;
+    --accent: #4f9cff;
+    --accent-2: #3fb950;
+    --amber: #d29922;
+    --code-bg: #0b0f15;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px 96px; }
+  header.hero {
+    padding: 64px 24px 40px;
+    text-align: center;
+    background: radial-gradient(1200px 400px at 50% -120px, rgba(79,156,255,0.18), transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  header.hero h1 { font-size: 2.4rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+  header.hero p.tag { color: var(--muted); font-size: 1.05rem; margin: 0 auto; max-width: 620px; }
+  .pill {
+    display: inline-block; margin-top: 18px; padding: 10px 18px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px;
+    font-family: var(--mono); font-size: 0.86rem; color: var(--text);
+  }
+  .pill b { color: var(--accent); }
+  .links { margin-top: 22px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .links a {
+    text-decoration: none; padding: 10px 20px; border-radius: 8px;
+    font-weight: 600; font-size: 0.92rem; border: 1px solid var(--border);
+  }
+  .links a.primary { background: var(--accent); color: #04101f; border-color: var(--accent); }
+  .links a.ghost { background: var(--panel); color: var(--text); }
+  h2 {
+    margin: 56px 0 18px; font-size: 1.45rem; letter-spacing: -0.01em;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { margin: 28px 0 10px; font-size: 1.1rem; color: var(--text); }
+  p { color: var(--text); }
+  .muted { color: var(--muted); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px 24px; margin: 18px 0;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 680px) { .grid { grid-template-columns: 1fr; } }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+  .stat .n { font-size: 1.6rem; font-weight: 700; color: var(--accent-2); }
+  .stat .l { color: var(--muted); font-size: 0.9rem; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; font-family: var(--mono);
+    font-size: 0.85rem; line-height: 1.55; color: #d6dee8;
+  }
+  code { font-family: var(--mono); font-size: 0.88em; color: #ffd9a0; }
+  pre code { color: inherit; }
+  .mermaid {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; text-align: center; margin: 18px 0;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  td b { color: var(--accent); }
+  ul.clean { padding-left: 20px; }
+  ul.clean li { margin: 6px 0; }
+  .flag { color: var(--amber); font-weight: 600; }
+  .quote {
+    border-left: 3px solid var(--accent); padding: 8px 0 8px 16px;
+    margin: 16px 0; color: var(--text); font-size: 1.02rem;
+  }
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; text-align: center; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>Earnings Extractor</h1>
+  <p class="tag">Review-first extraction of standard financial metrics from earnings PDFs and call transcripts into a client-ready Excel workbook, with citation review and a full audit trail.</p>
+  <div class="pill"><b>LLM draft</b> → deterministic validation → citation review → <b>approved Excel export</b></div>
+  <div class="links">
+    <a class="primary" href="REPLACE_WITH_DEMO_LINK">Live Demo</a>
+    <a class="ghost" href="REPLACE_WITH_REPO_LINK">Source Code</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h2>What it does</h2>
+  <div class="quote">This is not just &ldquo;an LLM extracts numbers.&rdquo; The model only does the fuzzy reading — find each metric, quote its source sentence, report a confidence. Everything that has to be reliable runs as fixed, testable code, and numbers reach the client workbook only after a human approves the citation behind them.</div>
+  <p>Given an earnings report or earnings-call transcript, the tool produces a draft dataset of standard metrics (revenue, net income, EPS, operating income, gross margin, operating expenses, buybacks &amp; dividends), validates every value against its own source evidence, flags anything uncertain or unsupported for human review, and exports an Excel workbook that matches the client template — plus JSON and a Markdown audit report.</p>
+
+  <h2>Architecture &amp; data flow</h2>
+  <div class="mermaid">
+flowchart TD
+    A[PDF input] --> B[Ingest]
+    B --> C[Classify document & pages]
+    C --> D[Structured LLM extraction<br/>value + quote + confidence]
+    D --> E[Normalize units & scale<br/>to USD millions]
+    E --> F[Validate<br/>evidence + consistency + magnitude]
+    F --> G[Confidence / review flags<br/>triage, not proof]
+    G --> H[Human review<br/>approve / reject / note]
+    H --> I[Final export<br/>Excel + JSON + audit]
+  </div>
+  <p class="muted">The orchestration is fixed code, not an agent. The LLM is one constrained, schema-bound call; ordering and control flow never depend on the model.</p>
+
+  <h2>Why the deterministic layer matters</h2>
+  <div class="grid">
+    <div class="stat"><div class="n">9/9</div><div class="l">Tesla Q2 2025 — recorded eval</div></div>
+    <div class="stat"><div class="n">9/9</div><div class="l">Citi Q1 2025 — recorded eval</div></div>
+    <div class="stat"><div class="n">83% → 100%</div><div class="l">Recorded A/B: raw model vs. after pipeline</div></div>
+    <div class="stat"><div class="n">~$0.014 / PDF</div><div class="l">Measured LLM cost — ~250× cheaper than analyst baseline</div></div>
+  </div>
+  <p class="muted">On the reproducible recorded A/B, the same raw model outputs move from 15/18 to 18/18 after normalization, enrichment, and validation. Golden values live only in <code>evaluation/</code>; runtime code never imports them, and a test enforces that separation.</p>
+
+  <h2>Confidence is review triage, not proof</h2>
+  <p>A high model confidence never lets a value skip validation, and validation never edits a value — it only marks it for review with a reason. A value is routed to a human when <span class="flag">any</span> of these is true:</p>
+  <ul class="clean">
+    <li>confidence is below the review threshold (<code>0.75</code>);</li>
+    <li>the source quote is missing;</li>
+    <li>the quote is not found on the cited page;</li>
+    <li>the extracted number is not grounded in its quote;</li>
+    <li>a required template field is blank;</li>
+    <li>the field is unsupported for the document type;</li>
+    <li>a consistency check fails (OCF − capex must reconcile to free cash flow);</li>
+    <li>a magnitude check fails (net/operating income vs. revenue; gross margin range).</li>
+  </ul>
+
+  <h2>Understanding the Excel workbook</h2>
+  <table>
+    <tr><th>Sheet</th><th>Contents</th></tr>
+    <tr><td><b>Client Template</b></td><td>First sheet, exact client columns &amp; formatting. Only approved values appear.</td></tr>
+    <tr><td><b>Metrics</b></td><td>Normalized extracted values plus each field's review decision.</td></tr>
+    <tr><td><b>Review Decisions</b></td><td>Approve / reject / not-applicable / note record per metric.</td></tr>
+    <tr><td><b>Evidence</b></td><td>Source page, quote, confidence, and review-flag reason per metric.</td></tr>
+  </table>
+  <p><b>Formatting:</b> revenue / net income / operating income / operating expenses render as <code>$&lt;n&gt;B</code> (stored as USD millions); gross margin as a percentage cell; EPS as a plain number; unsupported or unapproved values stay <b>blank</b> — never guessed. Demo/unreviewed exports are clearly marked <span class="flag">DRAFT/UNREVIEWED</span>.</p>
+
+  <h2>Run it</h2>
+  <h3>Setup</h3>
+  <pre><code>python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"</code></pre>
+
+  <h3>CLI demo — no API key (recorded mode replays committed responses)</h3>
+  <pre><code>python -m earnings_extractor extract assesment_info --out outputs/run_001 --mode recorded
+python -m earnings_extractor inspect outputs/run_001/draft_metrics.json
+python -m earnings_extractor review outputs/run_001 --out outputs/run_001/review.html --demo-decisions outputs/run_001/review_decisions.json
+python scripts/make_acceptance_decisions.py outputs/run_001 --out outputs/run_001/human_review_decisions.json
+python -m earnings_extractor export outputs/run_001 --decisions outputs/run_001/human_review_decisions.json --out outputs/extractions.xlsx</code></pre>
+
+  <h3>Web demo</h3>
+  <pre><code># terminal 1: Python API over the existing extractor/export code
+.venv/bin/python scripts/web_api_server.py --port 8000
+
+# terminal 2: Next.js frontend, proxying /api/process to the Python API
+PYTHON_API_BASE_URL=http://127.0.0.1:8000 npm run dev -- --port 3000</code></pre>
+  <p class="muted">Open <code>http://localhost:3000</code>. Demo mode runs the two golden PDFs with no API key.</p>
+
+  <h3>Tests &amp; evals</h3>
+  <pre><code>python -m earnings_extractor eval --draft outputs/test_tesla/draft_metrics.json --document-id tesla_q2_2025 --min-accuracy 0.9
+pytest -q
+ruff check .</code></pre>
+
+  <h2>Output artifacts</h2>
+  <ul class="clean">
+    <li><code>draft_metrics.json</code> — normalized draft rows, evidence, validation flags, token usage.</li>
+    <li><code>review_queue.json</code> — rows requiring a decision.</li>
+    <li><code>evidence_report.md</code> — citation-oriented audit summary.</li>
+    <li><code>review.html</code> — static review page: page, quote, confidence, flag reason, decision controls.</li>
+    <li><code>extractions.xlsx</code> / <code>.json</code> / <code>.audit.md</code> — the reviewed export and its audit trail.</li>
+  </ul>
+
+  <h2>Limitations &amp; production path</h2>
+  <p class="muted">V1 covers earnings PDFs and call transcripts. The golden eval set has two validated companies; production should expand to 30–50+ labeled documents, add confidence calibration from historical outcomes, connect ingestion to the client's workflow, and move the local review artifact into a persistent multi-user review queue with audit logs, SSO/RBAC, and monitoring for accuracy, review rate, failure rate, and cost per document.</p>
+
+  <footer>
+    Built for the Strange Loop take-home. Full details in <code>README.md</code>; verification gate in <code>docs/VERIFY.md</code>.
+  </footer>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "dark",
+    themeVariables: {
+      primaryColor: "#1c2330",
+      primaryBorderColor: "#2a3240",
+      primaryTextColor: "#e6edf3",
+      lineColor: "#4f9cff",
+      fontFamily: "ui-monospace, monospace"
+    }
+  });
+</script>
+</body>
+</html>

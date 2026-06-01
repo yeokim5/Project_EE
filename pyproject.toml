@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "earnings-extractor"
+version = "0.1.0"
+description = "Review-first earnings PDF metric extraction prototype."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openpyxl>=3.1",
+    "openai>=2.0",
+    "pdfplumber>=0.11",
+    "pymupdf>=1.24",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+earnings-extractor = "earnings_extractor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["earnings_extractor*", "evaluation*"]
+
+[tool.setuptools.package-data]
+earnings_extractor = ["recorded_responses/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

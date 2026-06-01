@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Earnings Extractor — Phase 5 Workflow</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2a3340;
+    --txt:#e6edf3; --muted:#9aa7b4; --dim:#6e7d8c;
+    --accent:#58a6ff; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --purple:#bc8cff; --teal:#39c5cf; --pink:#f778ba;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.6;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:21px;margin:48px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:0 0 6px}
+  p{margin:8px 0}
+  .lede{color:var(--muted);font-size:16px;max-width:800px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--panel2);padding:1px 6px;border-radius:5px;color:var(--teal)}
+  .file{color:var(--purple)}
+  .fn{color:var(--accent)}
+  .muted{color:var(--muted)}
+  .banner{background:linear-gradient(135deg,#161b22,#1c2530);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-top:18px}
+  .pill{font-family:var(--mono);font-size:12px;padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+  .pill b{color:var(--accent)}
+
+  .pipe{display:flex;flex-direction:column;gap:0;margin:18px 0}
+  .stage{display:grid;grid-template-columns:46px 1fr;gap:16px;align-items:stretch}
+  .rail{display:flex;flex-direction:column;align-items:center}
+  .dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700;color:#0e1116;flex:none}
+  .bar{width:2px;flex:1;background:var(--line);min-height:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;position:relative}
+  .card.new{border-color:#5a4a12;background:linear-gradient(180deg,#1a1709,#161b22)}
+  .card .meta{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:6px}
+  .new-flag{position:absolute;top:12px;right:14px;font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:#0e1116;background:var(--amber);padding:2px 7px;border-radius:20px;font-weight:700}
+  .io{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-family:var(--mono);font-size:11.5px}
+  .io span{padding:3px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line)}
+  .io .in{color:var(--amber)} .io .out{color:var(--green)}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  @media(max-width:760px){.two,.three{grid-template-columns:1fr}}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .box.green{border-color:#1f4a2c} .box.red{border-color:#5a2326} .box.amber{border-color:#5a4a12}
+
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.5px}
+  .ok{color:var(--green);font-weight:600}
+  .fail{color:var(--red);font-weight:600}
+  .blank{color:var(--amber);font-weight:600}
+
+  .phases{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+  .ph{flex:1;min-width:72px;text-align:center;padding:10px 6px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:12px}
+  .ph.done{border-color:#1f4a2c;background:#10241a}
+  .ph.now{border-color:var(--accent);background:#10243b;box-shadow:0 0 0 1px var(--accent)}
+  .ph .n{font-family:var(--mono);color:var(--dim);font-size:11px}
+  .ph.done .n{color:var(--green)} .ph.now .n{color:var(--accent)}
+  .legend{font-size:12.5px;color:var(--muted);margin-top:10px;display:flex;gap:18px;flex-wrap:wrap}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:5px}
+  .note{font-size:13px;color:var(--muted);background:var(--panel2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;margin-top:12px}
+  .note.amber{border-left-color:var(--amber)}
+  .note.green{border-left-color:var(--green)}
+  .note.red{border-left-color:var(--red)}
+  footer{margin-top:60px;color:var(--dim);font-size:12.5px;text-align:center;border-top:1px solid var(--line);padding-top:18px}
+
+  .flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;margin-top:10px}
+  .flow .step{padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel)}
+  .flow .step.hot{border-color:var(--amber);color:var(--amber)}
+  .flow .arrow{color:var(--dim)}
+
+  /* terminal */
+  .term{background:#0a0d12;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:12.5px;overflow-x:auto;margin-top:10px}
+  .term .cmd{color:var(--teal)} .term .cmt{color:var(--dim)} .term .out{color:var(--muted)}
+  .term .gd{color:var(--green)} .term .am{color:var(--amber)}
+
+  /* mock review card */
+  .mock{background:#f6f8fa;color:#24292f;border-radius:12px;padding:16px;margin-top:12px;font-size:13px}
+  .mock .mhead{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d8dee4;padding-bottom:10px;margin-bottom:12px}
+  .mock .mtitle{font-weight:700;font-size:15px;color:#24292f}
+  .mock .msub{color:#57606a;font-size:12px}
+  .mcard{border:1px solid #d8dee4;border-radius:8px;padding:12px;margin:10px 0;background:#fff}
+  .mcard.att{border-left:4px solid #9a3412}
+  .mcard.ready{border-left:4px solid #166534}
+  .mrow{display:flex;justify-content:space-between;gap:10px;align-items:start}
+  .mname{font-weight:700;color:#24292f}
+  .mpill{font-size:11px;border:1px solid #d8dee4;border-radius:999px;padding:2px 8px;color:#57606a;white-space:nowrap}
+  .mpill.att{color:#9a3412;border-color:#f1b48f}
+  .mpill.ready{color:#166534;border-color:#9bd3ad}
+  .mgrid{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;margin:8px 0;font-size:12px}
+  .mgrid dt{color:#57606a} .mgrid dd{margin:0;color:#24292f}
+  .mquote{background:#f6f8fa;border-left:3px solid #d8dee4;padding:8px 10px;font-size:12px;color:#24292f;margin:8px 0}
+  .mctrl{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .msel{border:1px solid #d8dee4;border-radius:6px;padding:5px 8px;background:#fff;font-size:12px}
+  .msel.red{color:#9a3412;border-color:#f1b48f}
+  .msel.green{color:#166534;border-color:#9bd3ad}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">PHASE 5 · THE HUMAN REVIEW GATE</span>
+  <h1>Earnings Extractor — Phase 5, explained</h1>
+  <p class="lede">Phase 4 produced a draft you can <i>trust and reproduce</i> — every number canonical, every quote fact-checked, all nine client fields present, runnable offline. But a draft is still a machine's first guess. <b>Phase 5 puts a human in the loop.</b> It turns <code>draft_metrics.json</code> into a review package: a queue of every value, a plain-Markdown evidence report, and a clickable <code>review.html</code> where a person approves, rejects, or flags each number — producing a <code>review_decisions.json</code> that the Phase 6 export will require before it writes a final Excel. Nothing reaches the client workbook without passing through this gate.</p>
+
+  <div class="banner">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="pill"><b>Theme:</b> draft → reviewed, sign-off-ready result</span>
+      <span class="pill">New command: <b style="color:var(--accent)">review</b></span>
+      <span class="pill">New: queue · evidence report · review UI · decisions</span>
+      <span class="pill">Next → Phase 6: <b style="color:var(--accent)">final Excel export</b></span>
+    </div>
+  </div>
+
+  <!-- ======================= 30 SECOND RECAP ======================= -->
+  <h2>If you read nothing else</h2>
+  <p>The <code>review</code> command reads a finished draft run and writes <b>four artifacts</b> next to it: <code class="file">review_queue.json</code> (every metric, machine-readable), <code class="file">evidence_report.md</code> (a readable audit table), <code class="file">review.html</code> (the interactive review page a human clicks through), and optionally a demo <code class="file">review_decisions.json</code>. The whole point: <b>every value — even high-confidence ones — gets a visible citation review before it can become a final client number.</b> Phase 5 only <i>collects</i> decisions; it deliberately does <b>not</b> export Excel (that's Phase 6) and does <b>not</b> touch extraction.</p>
+  <div class="note">All the heavy lifting lives in one new file, <code class="file">earnings_extractor/review.py</code>, wired to the CLI as <code>review</code>. It reuses the same <code class="fn">DraftRun</code> schema and review flags Phase 4 produced — it never re-derives them.</div>
+
+  <!-- ======================= TRY IT YOURSELF ======================= -->
+  <h2>Try it yourself — 3 commands</h2>
+  <p class="muted">From the project root, with the virtual environment already set up. Recorded mode needs <b>no API key</b>.</p>
+
+  <div class="term">
+<span class="cmt"># 1 · build a draft from BOTH sample PDFs (Tesla report + Citi transcript)</span><br>
+<span class="cmd">.venv/bin/python -m earnings_extractor extract assesment_info --out outputs/run_001 --mode recorded</span><br>
+<span class="out">Wrote outputs/run_001/draft_metrics.json</span><br><br>
+<span class="cmt"># 2 · generate the review package (+ a demo decisions file so you can see one)</span><br>
+<span class="cmd">.venv/bin/python -m earnings_extractor review outputs/run_001 --demo-decisions outputs/run_001/review_decisions.json</span><br>
+<span class="out">Wrote outputs/run_001/review_queue.json</span><br>
+<span class="out">Wrote outputs/run_001/evidence_report.md</span><br>
+<span class="out">Wrote outputs/run_001/review.html</span><br>
+<span class="out">Wrote outputs/run_001/review_decisions.json</span><br><br>
+<span class="cmt"># 3 · open the review page in your browser (macOS)</span><br>
+<span class="cmd">open outputs/run_001/review.html</span>
+  </div>
+
+  <div class="note amber"><b>What you should see:</b> the page lists <b>21 metric cards</b> (12 from Tesla, 9 from Citi). About <b>4</b> are marked <span style="color:var(--amber)">needs attention</span> (a red left edge); the rest are <span style="color:var(--green)">ready for review</span> (green edge). Each card shows the value, the source PDF + page, the exact quote, a confidence score, and a decision dropdown. Use the <b>Filter</b> to show only attention items, <b>Search</b> by company or metric, type your name in <b>Reviewer</b>, set each decision, then click <b>Download decisions JSON</b>.</div>
+
+  <h3 style="margin-top:22px">What each artifact is for</h3>
+  <table>
+    <tr><th>File</th><th>Open it with</th><th>What it's for</th></tr>
+    <tr><td class="mono file">review.html</td><td>a web browser</td><td>The interactive review surface for a human. Click through every value and record approve / reject / needs-fix / not-applicable.</td></tr>
+    <tr><td class="mono file">evidence_report.md</td><td>any text/Markdown viewer</td><td>A readable audit table grouped by company — metric, value, page, confidence, quote — usable without opening the HTML.</td></tr>
+    <tr><td class="mono file">review_queue.json</td><td>code / scripts</td><td>The machine-readable backbone: every metric with its <code>metric_id</code>, evidence, and <code>requires_attention</code> flag. The HTML is built from this.</td></tr>
+    <tr><td class="mono file">review_decisions.json</td><td>code / Phase 6</td><td>The recorded decisions. The demo file here is <code>is_demo:true</code>; a real reviewer's downloaded file is <code>is_demo:false</code>.</td></tr>
+  </table>
+
+  <!-- ======================= THE REVIEW FLOW ======================= -->
+  <h2>What <code>review</code> does, step by step</h2>
+  <p class="muted">Orchestrated by <code class="fn">write_review_artifacts()</code> in <code class="file">review.py</code>. Yellow cards are the new Phase 5 work.</p>
+
+  <div class="pipe">
+
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--teal)">1</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Load the finished draft</h3>
+        <p class="muted" style="font-size:13.5px">Reads <code class="file">outputs/&lt;run&gt;/draft_metrics.json</code> back into the validated <code class="fn">DraftRun</code> schema. A missing or malformed draft fails loudly here, before any artifact is written.</p>
+        <div class="meta"><span class="file">review.py</span> → <span class="fn">_load_draft_file()</span></div>
+        <div class="io"><span class="in">in: draft_metrics.json</span><span class="out">out: DraftRun object</span></div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--amber)">2</div><div class="bar"></div></div>
+      <div class="card new">
+        <span class="new-flag">PH5</span>
+        <h3>Turn each metric into a review item</h3>
+        <p class="muted" style="font-size:13.5px">For every metric (in draft order) it builds a <code class="fn">ReviewItem</code> with a deterministic, run-scoped <b>metric_id</b> (<code>&lt;run_id&gt;:0000</code>, <code>:0001</code> …) so Phase 6 can map a decision back to the exact row. It also resolves which <b>source PDF</b> the metric came from and computes <code>requires_attention</code>.</p>
+        <div class="meta"><span class="file">review.py</span> → <span class="fn">build_review_items()</span></div>
+        <div class="io"><span class="in">in: draft metrics</span><span class="out">out: list of ReviewItem</span></div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--amber)">3</div><div class="bar"></div></div>
+      <div class="card new">
+        <span class="new-flag">PH5</span>
+        <h3>Write the queue + evidence report</h3>
+        <p class="muted" style="font-size:13.5px"><code class="file">review_queue.json</code> holds <b>all</b> metrics (not just flagged ones — high-confidence values still need a look). <code class="file">evidence_report.md</code> is a plain-Markdown table grouped by company / source document, readable without the UI.</p>
+        <div class="meta"><span class="file">review.py</span> → <span class="fn">_render_evidence_report()</span></div>
+        <div class="io"><span class="out">review_queue.json</span><span class="out">evidence_report.md</span></div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--amber)">4</div><div class="bar"></div></div>
+      <div class="card new">
+        <span class="new-flag">PH5</span>
+        <h3>Render the secure review page</h3>
+        <p class="muted" style="font-size:13.5px">A single self-contained <code class="file">review.html</code> with the queue embedded as JSON. PDF-extracted text is escaped (<code>&lt;</code> → <code><</code>) and every value renders via <code>textContent</code>, so a stray <code>&lt;/script&gt;</code> inside a quote can't break or hijack the page. No external dependencies.</p>
+        <div class="meta"><span class="file">review.py</span> → <span class="fn">_render_review_html()</span></div>
+        <div class="io"><span class="out">review.html (static, offline)</span></div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--green)">5</div></div>
+      <div class="card new">
+        <span class="new-flag">PH5</span>
+        <h3>Optionally emit demo decisions</h3>
+        <p class="muted" style="font-size:13.5px">Only with <code>--demo-decisions</code>. Generates a deterministic <code class="file">review_decisions.json</code> for verification, clearly stamped <code>is_demo:true</code> so it can never be mistaken for real human approval.</p>
+        <div class="meta"><span class="file">review.py</span> → <span class="fn">_build_demo_decisions()</span></div>
+        <div class="io"><span class="out">review_decisions.json (is_demo:true)</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ======================= THE UI ======================= -->
+  <h2>The review page, up close</h2>
+  <p class="muted">A mock of a single card as it appears in <code class="file">review.html</code> — one for a clean value, one that needs attention.</p>
+
+  <div class="mock">
+    <div class="mhead">
+      <div>
+        <div class="mtitle">Earnings Extraction Review</div>
+        <div class="msub">Run 9b3ecf09… · 21 metrics · 21 shown</div>
+      </div>
+      <div class="msub">Filter ▾ &nbsp; Search 🔍 &nbsp; Reviewer: Human reviewer</div>
+    </div>
+
+    <div class="mcard ready">
+      <div class="mrow">
+        <span class="mname">Tesla, Inc. · Total revenue</span>
+        <span class="mpill ready">ready for review</span>
+      </div>
+      <dl class="mgrid">
+        <dt>Value</dt><dd>22496</dd>
+        <dt>Unit / scale</dt><dd>USD / millions</dd>
+        <dt>Source PDF</dt><dd>assesment_info/TSLA-Q2-2025-Update.pdf</dd>
+        <dt>Source page</dt><dd>4</dd>
+        <dt>Confidence</dt><dd>0.95</dd>
+        <dt>Needs review</dt><dd>no</dd>
+      </dl>
+      <div class="mquote">"Total revenues 25,500 25,182 25,707 19,335 22,496 -12%"</div>
+      <div class="mctrl">Decision <span class="msel green">approved ▾</span> Reviewer note <span class="msel" style="flex:1">—</span></div>
+    </div>
+
+    <div class="mcard att">
+      <div class="mrow">
+        <span class="mname">Citigroup · Buybacks and dividends</span>
+        <span class="mpill att">needs attention</span>
+      </div>
+      <dl class="mgrid">
+        <dt>Value</dt><dd>$3.1B capital returned, including $2.0B buybacks</dd>
+        <dt>Source PDF</dt><dd>assesment_info/citi_earnings_q12025.pdf</dd>
+        <dt>Source page</dt><dd>3</dd>
+        <dt>Confidence</dt><dd>0.85</dd>
+        <dt>Needs review</dt><dd>yes</dd>
+        <dt>Review reason</dt><dd>Auto-extracted from a capital-return sentence; verify the buyback/dividend split against the cited source.</dd>
+      </dl>
+      <div class="mquote">"…returned $3.1 billion in capital… including $2.0 billion of buybacks…"</div>
+      <div class="mctrl">Decision <span class="msel red">needs_fix ▾</span> Reviewer note <span class="msel" style="flex:1">verify split</span></div>
+    </div>
+    <div class="msub" style="margin-top:4px">⤓ Download decisions JSON — writes a human file (is_demo:false) carrying the run_id, so Phase 6 accepts it.</div>
+  </div>
+
+  <div class="note">The four decision choices are exactly: <code>approved</code>, <code>rejected</code>, <code>needs_fix</code>, <code>not_applicable</code>. A blank/unsupported field (e.g. operating income on a bank transcript) defaults to <code>not_applicable</code>; an attention-flagged value defaults to <code>needs_fix</code>; everything else to <code>approved</code> — but these are <i>defaults a human is expected to confirm</i>, not final answers.</div>
+
+  <!-- ======================= ATTENTION + RESOLUTION ======================= -->
+  <h2>Two ideas that keep the gate honest</h2>
+  <div class="two">
+    <div class="box amber">
+      <h3>🚩 requires_attention</h3>
+      <p class="muted" style="font-size:13px">Phase 5 does <b>not</b> reinvent "is this risky?" logic. It reuses Phase 4's <code>needs_review</code> flag and only adds one new trigger — <code>source_resolution_failed</code> (it couldn't tell which PDF a metric came from). So: <code>requires_attention = needs_review OR source_resolution_failed</code>. One source of truth, no drift.</p>
+    </div>
+    <div class="box">
+      <h3>🗂️ Which PDF did this come from?</h3>
+      <p class="muted" style="font-size:13px">Draft metrics don't yet carry their own source file, so Phase 5 resolves it with a heuristic: one doc → use it; otherwise a unique document type; otherwise match company/ticker to the filename; otherwise <code>"unknown"</code> + flag for attention. A known v1 limitation, logged in <code class="file">DECISIONS.md</code>.</p>
+    </div>
+  </div>
+
+  <!-- ======================= DEMO VS HUMAN ======================= -->
+  <h2>Demo decisions vs. real human decisions</h2>
+  <p class="muted">Both are valid <code class="file">review_decisions.json</code> files; the <code>is_demo</code> flag is how Phase 6 tells them apart.</p>
+  <div class="two">
+    <div class="box amber">
+      <h3 style="color:var(--amber)">Demo (CLI <code>--demo-decisions</code>)</h3>
+      <div class="flow">
+        <span class="step">queue</span><span class="arrow">→</span>
+        <span class="step hot">auto rules</span><span class="arrow">→</span>
+        <span class="step">is_demo: true</span>
+      </div>
+      <p class="muted" style="font-size:13px;margin-top:10px">Deterministic, for verification only. Blank → <code>not_applicable</code>, placeholder/unresolved evidence → <code>needs_fix</code>, populated + evidence → <code>approved</code>. Each row carries a note saying a human must still confirm.</p>
+    </div>
+    <div class="box green">
+      <h3 style="color:var(--green)">Human (browser download)</h3>
+      <div class="flow">
+        <span class="step">review.html</span><span class="arrow">→</span>
+        <span class="step hot">your clicks</span><span class="arrow">→</span>
+        <span class="step">is_demo: false</span>
+      </div>
+      <p class="muted" style="font-size:13px;margin-top:10px">The downloaded file carries the run_id, created_at, reviewer name, and each decision — and validates through <code class="fn">load_review_decisions()</code>, the same gate Phase 6 uses.</p>
+    </div>
+  </div>
+  <div class="note amber"><b>Honesty caveat (carried into Phase 6):</b> the download pre-fills untouched items with those same defaults. So clicking Download without reviewing yields a "human" file that auto-approved high-confidence values. Phase 6's export gate therefore treats "reviewed" as <i>resolved attention state</i>, not merely "a decision row exists" — an attention-flagged field left at bare <code>approved</code> won't export without a visibly-marked override.</div>
+
+  <!-- ======================= VALIDATION ======================= -->
+  <h2>The decision-file validator</h2>
+  <p class="muted"><code class="fn">load_review_decisions()</code> is the guard Phase 6 will lean on. It refuses anything malformed:</p>
+  <table>
+    <tr><th>Rejected</th><th>Why</th></tr>
+    <tr><td class="mono fail">invalid JSON / missing run_id</td><td>Not a usable decisions file.</td></tr>
+    <tr><td class="mono fail">duplicate metric_id</td><td>Two conflicting decisions for one value.</td></tr>
+    <tr><td class="mono fail">unknown status / "pending"</td><td>Only the four real decisions count; <code>pending</code> is not a decision.</td></tr>
+    <tr><td class="mono fail">mismatched run_id</td><td>Decisions from a different extraction run can't be trusted against this draft.</td></tr>
+    <tr><td class="mono ok">demo &amp; human files</td><td>Both shapes are accepted as long as they're well-formed.</td></tr>
+  </table>
+  <div class="note">Phase 5 stops at <i>structural</i> validity. It does <b>not</b> enforce "every metric has a decision" — that completeness check belongs to Phase 6's export gate.</div>
+
+  <!-- ======================= TESTS ======================= -->
+  <h2>How Phase 5 is proven</h2>
+  <p class="muted"><code class="file">tests/test_phase5_review.py</code> locks the behavior in (part of the <b>54 passing</b> tests). A sample:</p>
+  <div class="two">
+    <div class="box">
+      <h3>Artifacts &amp; coverage</h3>
+      <p class="muted" style="font-size:13px">The command writes all four files; the queue contains all <b>21</b> combined Tesla+Citi metrics, not just the flagged ones.</p>
+    </div>
+    <div class="box">
+      <h3>Decisions &amp; safety</h3>
+      <p class="muted" style="font-size:13px">Demo rules behave; a browser-shaped human file (<code>is_demo:false</code> with run_id) validates; duplicates / bad statuses / <code>pending</code> / mismatched run_id are rejected; the HTML escapes embedded JSON.</p>
+    </div>
+  </div>
+
+  <!-- ======================= PHASES ======================= -->
+  <h2>Where this sits in the plan</h2>
+  <div class="phases">
+    <div class="ph done"><div class="n">0–2</div>scaffold</div>
+    <div class="ph done"><div class="n">3 ✓</div>core pipeline</div>
+    <div class="ph done"><div class="n">4 ✓</div>trust + offline</div>
+    <div class="ph now"><div class="n">5 ▸ now</div>human review</div>
+    <div class="ph"><div class="n">6</div>export</div>
+    <div class="ph"><div class="n">7</div>≥90% gate</div>
+    <div class="ph"><div class="n">8–9</div>polish</div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch" style="background:#10241a;border:1px solid #1f4a2c"></span>done</span>
+    <span><span class="swatch" style="background:#10243b;border:1px solid var(--accent)"></span>current</span>
+    <span><span class="swatch" style="background:var(--panel);border:1px solid var(--line)"></span>upcoming</span>
+  </div>
+  <p style="margin-top:16px"><b>Phase 5 goal (met):</b> a human can see every extracted value with its evidence and record a decision, producing a validated <code>review_decisions.json</code> — without any final Excel being written yet. <b>Next, Phase 6:</b> consume those decisions to export the client-template workbook (plus Metrics / Review Decisions / Evidence tabs), refusing to ship unreviewed required fields unless an override visibly marks the file as draft.</p>
+
+  <footer>Generated for the Strange Loop earnings-extractor · Phase 5 · reflects the actual code in <code>earnings_extractor/review.py</code> &amp; <code>tests/test_phase5_review.py</code></footer>
+
+</div>
+</body>
+</html>

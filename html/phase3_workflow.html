@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Earnings Extractor — Phase 3 Workflow</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2a3340;
+    --txt:#e6edf3; --muted:#9aa7b4; --dim:#6e7d8c;
+    --accent:#58a6ff; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --purple:#bc8cff; --teal:#39c5cf; --pink:#f778ba;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.6;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:21px;margin:48px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:0 0 6px}
+  p{margin:8px 0}
+  .lede{color:var(--muted);font-size:16px;max-width:760px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--panel2);padding:1px 6px;border-radius:5px;color:var(--teal)}
+  .file{color:var(--purple)}
+  .fn{color:var(--accent)}
+  .muted{color:var(--muted)}
+  .grid{display:grid;gap:14px}
+  .banner{background:linear-gradient(135deg,#161b22,#1c2530);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-top:18px}
+  .pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .pill{font-family:var(--mono);font-size:12px;padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+  .pill b{color:var(--accent)}
+
+  /* pipeline */
+  .pipe{display:flex;flex-direction:column;gap:0;margin:18px 0}
+  .stage{display:grid;grid-template-columns:46px 1fr;gap:16px;align-items:stretch}
+  .rail{display:flex;flex-direction:column;align-items:center}
+  .dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700;color:#0e1116;flex:none}
+  .bar{width:2px;flex:1;background:var(--line);min-height:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  .card .meta{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:6px}
+  .io{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-family:var(--mono);font-size:11.5px}
+  .io span{padding:3px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line)}
+  .io .in{color:var(--amber)} .io .out{color:var(--green)}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.two{grid-template-columns:1fr}}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .box.green{border-color:#1f4a2c} .box.red{border-color:#5a2326}
+  .wall{position:relative;text-align:center;margin:8px 0}
+
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.5px}
+  .ok{color:var(--green);font-weight:600}
+  .fail{color:var(--red);font-weight:600}
+  .blank{color:var(--amber);font-weight:600}
+
+  .phases{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+  .ph{flex:1;min-width:72px;text-align:center;padding:10px 6px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:12px}
+  .ph.done{border-color:#1f4a2c;background:#10241a}
+  .ph.now{border-color:var(--accent);background:#10243b;box-shadow:0 0 0 1px var(--accent)}
+  .ph .n{font-family:var(--mono);color:var(--dim);font-size:11px}
+  .ph.done .n{color:var(--green)} .ph.now .n{color:var(--accent)}
+  .legend{font-size:12.5px;color:var(--muted);margin-top:10px;display:flex;gap:18px;flex-wrap:wrap}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:5px}
+  .note{font-size:13px;color:var(--muted);background:var(--panel2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;margin-top:12px}
+  .schema-fields{columns:2;column-gap:24px;font-family:var(--mono);font-size:12px;margin-top:8px}
+  @media(max-width:600px){.schema-fields{columns:1}}
+  .schema-fields div{break-inside:avoid;padding:2px 0;color:var(--muted)}
+  .schema-fields b{color:var(--txt)}
+  footer{margin-top:60px;color:var(--dim);font-size:12.5px;text-align:center;border-top:1px solid var(--line);padding-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">PHASE 3 · CORE PIPELINE · EVAL-FIRST</span>
+  <h1>Earnings Extractor — how it works</h1>
+  <p class="lede">A <b>review-first</b> tool that reads an earnings PDF and pulls out key financial metrics — but never just trusts itself. Every number it reports is tied to the exact quote it came from, and anything uncertain is flagged for a human. This page walks the whole machine, stage by stage, with the real files and functions behind each step.</p>
+
+  <div class="banner">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="pill"><b>Verdict:</b> Phase 3 passed → cleared for Phase 4</span>
+      <span class="pill">Tesla report: <b style="color:var(--green)">9/9 (100%)</b></span>
+      <span class="pill">Citi transcript: <b style="color:var(--amber)">4/9 (44%)</b> · Phase-4 work</span>
+      <span class="pill">29 tests pass · lint clean</span>
+    </div>
+  </div>
+
+  <!-- ======================= THE BIG IDEA ======================= -->
+  <h2>The one idea behind everything</h2>
+  <p>There are deliberately <b>two separate worlds</b> in this project that are not allowed to talk to each other:</p>
+  <div class="two">
+    <div class="box">
+      <h3>🏭 The extractor <span class="muted" style="font-weight:400">— does the work</span></h3>
+      <p class="muted" style="font-size:13.5px">The package <code class="file">earnings_extractor/</code>. It reads the PDF and produces draft metrics. It has <b>no idea</b> what the "right" answers are — it must actually read the document.</p>
+    </div>
+    <div class="box">
+      <h3>📋 The evaluation <span class="muted" style="font-weight:400">— grades the work</span></h3>
+      <p class="muted" style="font-size:13.5px">The package <code class="file">evaluation/</code>. It holds the hand-verified answer key and scores the draft against it — like a teacher with a marking scheme.</p>
+    </div>
+  </div>
+  <div class="wall">
+    <div class="note" style="border-left-color:var(--red)"><b>The "no-cheat" wall:</b> the extractor is forbidden from importing anything in <code>evaluation/</code>. A test (<code class="file">tests/test_no_cheat_imports.py</code>) walks the code's syntax tree and <b>fails the build</b> if it finds even one such import. Otherwise the tool could "score 100%" by peeking at the answers instead of reading the PDF — making the score meaningless.</p></div>
+  </div>
+
+  <!-- ======================= PIPELINE ======================= -->
+  <h2>The pipeline — one PDF, six stages</h2>
+  <p class="muted">This is what runs when you type <code>python3 -m earnings_extractor extract &lt;pdf&gt; --out … --mode live</code>. Orchestrated by <code class="fn">extract()</code> in <code class="file">pipeline.py</code>.</p>
+
+  <div class="pipe">
+
+    <!-- 0 CLI -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--dim)">⌘</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Command line entry</h3>
+        <p class="muted" style="font-size:13.5px">You pick a subcommand: <code>extract</code>, <code>inspect</code>, or <code>eval</code>. The parser routes the call and catches errors cleanly.</p>
+        <div class="meta"><span class="file">cli.py</span> → <span class="fn">build_parser()</span>, <span class="fn">main()</span></div>
+      </div>
+    </div>
+
+    <!-- 1 ingest -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--teal)">1</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Read the PDF → page text</h3>
+        <p class="muted" style="font-size:13.5px">Opens the PDF and pulls plain text out of every page, keeping the real 1-based page numbers so evidence can point back accurately. Built on the <code>pdfplumber</code> library.</p>
+        <div class="meta"><span class="file">ingest.py</span> → <span class="fn">read_pdf_pages()</span> · returns <code>list[PageText]</code></div>
+        <div class="io"><span class="in">in: PDF file</span><span class="out">out: page text + page numbers</span></div>
+      </div>
+    </div>
+
+    <!-- 2 classify -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--accent)">2</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Classify the document</h3>
+        <p class="muted" style="font-size:13.5px">Is this a formal <b>earnings report</b> (tables of numbers) or an <b>earnings call transcript</b> (people speaking)? Decided <b>without any AI</b> — purely from generic signals: how dense with numbers a page is, standard accounting phrases (<code>"$ in millions"</code>, <code>"unaudited"</code>), and a speaker-turn pattern (<code>Name:</code>). If neither, it's marked <code>unknown</code> and skipped.</p>
+        <div class="meta"><span class="file">classify.py</span> → <span class="fn">classify_document()</span>, <span class="fn">classify_page()</span></div>
+        <div class="io"><span class="out">earnings_report</span><span class="out">earnings_call_transcript</span><span class="out">unknown → skipped</span></div>
+        <p class="note" style="margin-top:10px">These heuristics were deliberately rewritten to be <b>generic</b> — no company names, no hardcoded quarters — so the tool generalizes to PDFs it has never seen.</p>
+      </div>
+    </div>
+
+    <!-- 3 select -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--accent)">3</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Pick the pages worth reading</h3>
+        <p class="muted" style="font-size:13.5px">A 30-page PDF is mostly filler. This ranks pages by relevance — <code>numeric_density + 2 × marker_hits</code> (markers = financial terms like "total revenue", "operating income", "EPS") — and keeps the top pages. Page&nbsp;1 is always included for company identity. This is why Tesla's metric-rich page&nbsp;4 always survives the cut.</p>
+        <div class="meta"><span class="file">classify.py</span> → <span class="fn">select_extraction_pages()</span> (default max 6 pages)</div>
+        <div class="io"><span class="in">in: all pages</span><span class="out">out: ~6 highest-signal pages</span></div>
+      </div>
+    </div>
+
+    <!-- 4 extract -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--pink)">4</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Ask the AI to extract — with evidence</h3>
+        <p class="muted" style="font-size:13.5px">The selected page text is sent to OpenAI (<code>gpt-5.4-mini</code>, <code>reasoning_effort=low</code>) using <b>Structured Outputs</b> — the model is forced to return data in our exact schema, not free text. The prompt demands a <b>source quote for every metric</b> and says: if a value isn't supported, return <code>null</code> + <code>needs_review</code> rather than guessing.</p>
+        <div class="meta"><span class="file">extractor.py</span> → <span class="fn">extract_metrics_live()</span> · <code>client.responses.parse(text_format=MetricsBatch)</code></div>
+        <div class="io"><span class="in">in: page text + doc type</span><span class="out">out: MetricsBatch (raw model output)</span></div>
+      </div>
+    </div>
+
+    <!-- 5 validate -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--purple)">5</div><div class="bar"></div></div>
+      <div class="card">
+        <h3>Validate &amp; repair the output</h3>
+        <p class="muted" style="font-size:13.5px">The model's response is run through strict Pydantic validation (<code>extra="forbid"</code>, confidence must be 0–1, metric name and source quote can't be empty). Harmless wrapping (e.g. a stray <code>{"data": …}</code>) is unwrapped and enum casing fixed — but <b>values are never filled in</b>. Malformed output is rejected, not trusted.</p>
+        <div class="meta"><span class="file">schema.py</span> → <span class="fn">repair_metric_batch()</span>, <span class="fn">MetricRow</span> validators</div>
+        <div class="io"><span class="in">in: raw model output</span><span class="out">out: validated MetricRow[]</span></div>
+      </div>
+    </div>
+
+    <!-- 6 save -->
+    <div class="stage">
+      <div class="rail"><div class="dot" style="background:var(--green)">6</div></div>
+      <div class="card">
+        <h3>Assemble &amp; save the draft</h3>
+        <p class="muted" style="font-size:13.5px">Everything is packed into a <code>DraftRun</code> — a full audit record: a unique run id, UTC timestamp, model used, which pages were chosen, the classification, and all metric rows — then written to disk as JSON.</p>
+        <div class="meta"><span class="file">pipeline.py</span> → builds <span class="fn">DraftRun</span> → <span class="file">outputs/&lt;run&gt;/draft_metrics.json</span></div>
+        <div class="io"><span class="out">out: draft_metrics.json</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ======================= WHAT COMES OUT ======================= -->
+  <h2>What a single extracted metric looks like</h2>
+  <p class="muted">Every row is a <code class="fn">MetricRow</code> (defined in <code class="file">schema.py</code>). The fields below are why the tool can be "reviewed" rather than blindly trusted — note <code>source_page</code>, <code>source_quote</code>, <code>needs_review</code> and <code>review_status</code>.</p>
+  <div class="box">
+    <div class="schema-fields">
+      <div><b>metric_name</b> — required, non-empty</div>
+      <div><b>value</b> — number, text, or null</div>
+      <div><b>unit</b> / <b>scale</b> — e.g. USD, millions</div>
+      <div><b>period</b> / <b>fiscal_period</b></div>
+      <div><b>gaap_or_non_gaap</b></div>
+      <div><b>segment</b> — business segment if any</div>
+      <div><b>year_over_year_change</b></div>
+      <div><b style="color:var(--teal)">source_page</b> — required</div>
+      <div><b style="color:var(--teal)">source_quote</b> — required, non-empty</div>
+      <div><b>confidence</b> — 0.0 to 1.0</div>
+      <div><b style="color:var(--amber)">needs_review</b> — default true</div>
+      <div><b>review_reason</b> — why flagged</div>
+      <div><b>review_status</b> — pending / approved / …</div>
+      <div><b>company</b> / <b>ticker</b></div>
+    </div>
+  </div>
+  <div class="note">The template the tool targets has 9 client fields: Company Name, Quarter, Total revenue, Earnings per share, Net income, Operating income, Gross margin, Operating expenses, and Buybacks &amp; dividends.</div>
+
+  <!-- ======================= EVAL ======================= -->
+  <h2>How the score is computed</h2>
+  <p class="muted">Separate from extraction. The <code class="file">evaluation/</code> package holds the hand-verified answer key and grades the draft field-by-field — within sensible tolerances, since "1,172" and "1172.0" should both count as correct.</p>
+  <div class="two">
+    <div class="box">
+      <h3>The answer key</h3>
+      <p class="muted" style="font-size:13.5px"><code class="file">golden_metrics.py</code> stores each correct value <b>with the exact quote and page</b> it came from. Some fields are intentionally marked "expected blank" — the tool earns points for <b>not</b> inventing a value that isn't in the document.</p>
+    </div>
+    <div class="box">
+      <h3>The grader</h3>
+      <p class="muted" style="font-size:13.5px"><code class="file">scoring.py</code> → <span class="fn">score_draft()</span> matches each expected field to a draft metric by name, then checks the value within tolerance. <code class="file">_eval_bridge.py</code> is the <b>only</b> sanctioned crossing point, via a dynamic import.</p>
+    </div>
+  </div>
+  <table>
+    <tr><th>Value type</th><th>How it's judged</th></tr>
+    <tr><td class="mono">currency_usd_millions</td><td>numeric, within a scaled currency tolerance</td></tr>
+    <tr><td class="mono">eps</td><td>numeric, within ±0.01</td></tr>
+    <tr><td class="mono">percentage_points</td><td>numeric, within ±0.1 pp</td></tr>
+    <tr><td class="mono">text / free_text</td><td>normalized text match</td></tr>
+    <tr><td class="mono">expected_blank_review</td><td>passes only if value is empty <i>and</i> flagged for review</td></tr>
+  </table>
+  <div class="note">The grader even understands "$4.1 billion" → 4,100 (millions): <code class="fn">_coerce_number()</code> strips <code>$</code>, commas, and a trailing <code>B</code>/<code>M</code>/<code>%</code> before comparing.</div>
+
+  <!-- ======================= RESULTS ======================= -->
+  <h2>Current results</h2>
+  <div class="two">
+    <div class="box green">
+      <h3>Tesla Q2 2025 report — <span class="ok">9/9 · 100%</span></h3>
+      <table>
+        <tr><th>Field</th><th>Result</th></tr>
+        <tr><td>Company Name</td><td class="ok">✓ matched</td></tr>
+        <tr><td>Quarter</td><td class="ok">✓ matched</td></tr>
+        <tr><td>Total revenue (22,496)</td><td class="ok">✓ in tolerance</td></tr>
+        <tr><td>Earnings per share (0.33)</td><td class="ok">✓ in tolerance</td></tr>
+        <tr><td>Net income (1,172)</td><td class="ok">✓ in tolerance</td></tr>
+        <tr><td>Operating income (923)</td><td class="ok">✓ in tolerance</td></tr>
+        <tr><td>Gross margin (17.2)</td><td class="ok">✓ in tolerance</td></tr>
+        <tr><td>Operating expenses (2,955)</td><td class="ok">✓ in tolerance</td></tr>
+        <tr><td>Buybacks &amp; dividends</td><td class="blank">✓ correctly left blank</td></tr>
+      </table>
+    </div>
+    <div class="box red">
+      <h3>Citi Q1 2025 transcript — <span class="fail">4/9 · 44%</span></h3>
+      <table>
+        <tr><th>Field</th><th>Result</th></tr>
+        <tr><td>Company Name</td><td class="ok">✓ matched</td></tr>
+        <tr><td>Quarter</td><td class="fail">✗ text differed</td></tr>
+        <tr><td>Total revenue</td><td class="fail">✗ wrong number</td></tr>
+        <tr><td>Earnings per share</td><td class="ok">✓ in tolerance</td></tr>
+        <tr><td>Net income</td><td class="fail">✗ wrong number</td></tr>
+        <tr><td>Operating income</td><td class="blank">✓ correctly blank</td></tr>
+        <tr><td>Gross margin</td><td class="blank">✓ correctly blank</td></tr>
+        <tr><td>Operating expenses</td><td class="fail">✗ wrong number</td></tr>
+        <tr><td>Buybacks &amp; dividends</td><td class="fail">✗ text differed</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="note">Why Citi is harder: in a <b>report</b>, numbers sit in clean labeled tables. In a <b>transcript</b>, figures are buried in spoken sentences ("on $21.6 billion of revenues…"), so the model grabs the wrong line. This is a <b>tool</b> limitation, not an answer-key problem — every Citi golden value was verified to appear verbatim in the PDF. Fixing transcript extraction is the headline job of Phase 4.</div>
+
+  <!-- ======================= PHASES ======================= -->
+  <h2>Where this sits in the plan</h2>
+  <div class="phases">
+    <div class="ph done"><div class="n">0–2</div>scaffold</div>
+    <div class="ph now"><div class="n">3 ▸ now</div>core pipeline</div>
+    <div class="ph"><div class="n">4</div>transcripts + offline</div>
+    <div class="ph"><div class="n">5</div>human review</div>
+    <div class="ph"><div class="n">6</div>export</div>
+    <div class="ph"><div class="n">7</div>≥90% gate</div>
+    <div class="ph"><div class="n">8–9</div>polish</div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch" style="background:#10241a;border:1px solid #1f4a2c"></span>done</span>
+    <span><span class="swatch" style="background:#10243b;border:1px solid var(--accent)"></span>current</span>
+    <span><span class="swatch" style="background:var(--panel);border:1px solid var(--line)"></span>upcoming</span>
+  </div>
+  <p style="margin-top:16px"><b>Phase 3 goal (met):</b> one PDF, end to end, to validated draft metrics with evidence and a printed field-level score. <b>Next, Phase 4:</b> make transcript extraction reliable, generalize the prompt (drop the Tesla-specific hint), and add <b>recorded/offline mode</b> so a reviewer can run the tool without an API key. The hard <b>≥90% accuracy</b> requirement lands at Phase 7.</p>
+
+  <footer>Generated for the Strange Loop earnings-extractor · Phase 3 · reflects the actual code in <code>earnings_extractor/</code> &amp; <code>evaluation/</code></footer>
+
+</div>
+</body>
+</html>

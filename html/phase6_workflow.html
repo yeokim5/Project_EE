@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Earnings Extractor — Phase 6 Workflow</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2a3340;
+    --txt:#e6edf3; --muted:#9aa7b4; --dim:#6e7d8c;
+    --accent:#58a6ff; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --purple:#bc8cff; --teal:#39c5cf; --pink:#f778ba;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.6;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:21px;margin:48px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16px;margin:0 0 6px}
+  p{margin:8px 0}
+  .lede{color:var(--muted);font-size:16px;max-width:820px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--panel2);padding:1px 6px;border-radius:5px;color:var(--teal)}
+  .file{color:var(--purple)}
+  .fn{color:var(--accent)}
+  .muted{color:var(--muted)}
+  .banner{background:linear-gradient(135deg,#161b22,#1c2530);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-top:18px}
+  .pill{font-family:var(--mono);font-size:12px;padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+  .pill b{color:var(--accent)}
+
+  .pipe{display:flex;flex-direction:column;gap:0;margin:18px 0}
+  .stage{display:grid;grid-template-columns:46px 1fr;gap:16px;align-items:stretch}
+  .rail{display:flex;flex-direction:column;align-items:center}
+  .dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:700;color:#0e1116;flex:none}
+  .bar{width:2px;flex:1;background:var(--line);min-height:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;position:relative}
+  .card.new{border-color:#5a4a12;background:linear-gradient(180deg,#1a1709,#161b22)}
+  .card .meta{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:6px}
+  .new-flag{position:absolute;top:12px;right:14px;font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:#0e1116;background:var(--amber);padding:2px 7px;border-radius:20px;font-weight:700}
+  .io{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-family:var(--mono);font-size:11.5px}
+  .io span{padding:3px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line)}
+  .io .in{color:var(--amber)} .io .out{color:var(--green)}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  @media(max-width:760px){.two,.three{grid-template-columns:1fr}}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .box.green{border-color:#1f4a2c} .box.red{border-color:#5a2326} .box.amber{border-color:#5a4a12}
+  .box h3 .x{font-family:var(--mono);font-size:12px}
+
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.5px}
+  .ok{color:var(--green);font-weight:600}
+  .fail{color:var(--red);font-weight:600}
+  .blank{color:var(--amber);font-weight:600}
+
+  .phases{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+  .ph{flex:1;min-width:72px;text-align:center;padding:10px 6px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:12px}
+  .ph.done{border-color:#1f4a2c;background:#10241a}
+  .ph.now{border-color:var(--accent);background:#10243b;box-shadow:0 0 0 1px var(--accent)}
+  .ph .n{font-family:var(--mono);color:var(--dim);font-size:11px}
+  .ph.done .n{color:var(--green)} .ph.now .n{color:var(--accent)}
+  .legend{font-size:12.5px;color:var(--muted);margin-top:10px;display:flex;gap:18px;flex-wrap:wrap}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:5px}
+  .note{font-size:13px;color:var(--muted);background:var(--panel2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;margin-top:12px}
+  .note.amber{border-left-color:var(--amber)}
+  .note.green{border-left-color:var(--green)}
+  .note.red{border-left-color:var(--red)}
+  footer{margin-top:60px;color:var(--dim);font-size:12.5px;text-align:center;border-top:1px solid var(--line);padding-top:18px}
+
+  .flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;margin-top:10px}
+  .flow .step{padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel)}
+  .flow .step.hot{border-color:var(--amber);color:var(--amber)}
+  .flow .step.gd{border-color:#1f4a2c;color:var(--green)}
+  .flow .step.bad{border-color:#5a2326;color:var(--red)}
+  .flow .arrow{color:var(--dim)}
+
+  /* terminal */
+  .term{background:#0a0d12;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:12.5px;overflow-x:auto;margin-top:10px}
+  .term .cmd{color:var(--teal)} .term .cmt{color:var(--dim)} .term .out{color:var(--muted)}
+  .term .gd{color:var(--green)} .term .am{color:var(--amber)} .term .bad{color:var(--red)}
+
+  /* mock excel */
+  .xl{background:#ffffff;color:#1f2328;border-radius:10px;margin-top:12px;overflow:hidden;border:1px solid #c7ccd1;font-size:12px}
+  .xltabs{display:flex;gap:0;background:#f3f4f6;border-bottom:1px solid #c7ccd1;font-size:11.5px}
+  .xltab{padding:7px 13px;border-right:1px solid #d9dde1;color:#57606a;cursor:default}
+  .xltab.active{background:#fff;color:#107c41;font-weight:700;border-bottom:2px solid #107c41}
+  .xltab.draft{color:#9a6700}
+  .xlgrid{overflow-x:auto}
+  table.sheet{border-collapse:collapse;width:100%;margin:0;font-size:11.5px}
+  table.sheet td,table.sheet th{border:1px solid #e1e4e8;padding:5px 8px;white-space:nowrap;color:#1f2328}
+  table.sheet thead th{background:#f6f8fa;color:#1f2328;font-weight:700;text-transform:none;letter-spacing:0;font-size:11.5px}
+  table.sheet td.num{text-align:right;font-variant-numeric:tabular-nums}
+  table.sheet td.empty{background:#fbfbfc;color:#a0a6ac}
+  .corner{background:#f3f4f6;color:#8b949e;width:26px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">PHASE 6 · THE FINAL EXPORT GATE</span>
+  <h1>Earnings Extractor — Phase 6, explained</h1>
+  <p class="lede">Phase 5 collected a human's decisions into <code>review_decisions.json</code> but deliberately wrote no Excel. <b>Phase 6 is the gate that turns reviewed decisions into the deliverable.</b> The new <code>export</code> command reads a draft run <i>plus</i> its decisions, refuses to ship anything that wasn't properly reviewed, and — only when the gate is satisfied — writes the client-template workbook alongside a JSON sidecar and a Markdown audit report. The guiding rule: <b>a number reaches the client sheet only after a human resolved it; otherwise the file is loudly stamped DRAFT.</b></p>
+
+  <div class="banner">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="pill"><b>Theme:</b> reviewed decisions → signed-off Excel</span>
+      <span class="pill">New command: <b style="color:var(--accent)">export</b></span>
+      <span class="pill">New: <b style="color:var(--accent)">extractions.xlsx</b> · .json · .audit.md</span>
+      <span class="pill">Next → Phase 7: <b style="color:var(--accent)">≥90% accuracy gate</b></span>
+    </div>
+  </div>
+
+  <!-- ======================= 30 SECOND RECAP ======================= -->
+  <h2>If you read nothing else</h2>
+  <p>The <code>export</code> command does three things in order: (1) <b>rebuilds</b> the review items from the draft and loads the decisions, (2) runs the <b>review gate</b> — and either blocks, or marks the run DRAFT, or lets it through as FINAL — and (3) <b>writes the workbook</b>: a first sheet that exactly matches the client's <code class="file">EarningsSample (1).xlsx</code> template, plus three audit tabs (<code>Metrics</code>, <code>Review Decisions</code>, <code>Evidence</code>). It never re-extracts and never imports the eval fixtures.</p>
+  <div class="note">All the logic lives in one new file, <code class="file">earnings_extractor/export.py</code>, wired to the CLI as <code>export</code>. It reuses Phase 5's <code class="fn">build_review_items()</code> and <code class="fn">load_review_decisions()</code> — the same gate the reviewer's file already passed.</div>
+
+  <!-- ======================= TRY IT YOURSELF ======================= -->
+  <h2>Try it yourself — the three export outcomes</h2>
+  <p class="muted">From the project root. Recorded mode needs <b>no API key</b>. Steps 1–2 just rebuild a reviewed run; steps 3–5 are the three things <code>export</code> can do.</p>
+
+  <div class="term">
+<span class="cmt"># 1 · build a draft from BOTH sample PDFs, then make the review package + a DEMO decisions file</span><br>
+<span class="cmd">.venv/bin/python -m earnings_extractor extract assesment_info --out outputs/run_001 --mode recorded</span><br>
+<span class="cmd">.venv/bin/python -m earnings_extractor review outputs/run_001 --demo-decisions outputs/run_001/review_decisions.json</span><br><br>
+<span class="cmt"># 2 · OUTCOME A — demo decisions are not real review, so a FINAL export is refused</span><br>
+<span class="cmd">.venv/bin/python -m earnings_extractor export outputs/run_001 --decisions outputs/run_001/review_decisions.json --out outputs/extractions.xlsx</span><br>
+<span class="bad">Export blocked:</span><br>
+<span class="bad">- Review decisions are demo-generated; pass --allow-unreviewed for a draft/unreviewed export.</span><br>
+<span class="out">(exit code 1)</span><br><br>
+<span class="cmt"># 3 · OUTCOME B — same demo file, but explicitly allowed → writes a DRAFT-marked workbook</span><br>
+<span class="cmd">.venv/bin/python -m earnings_extractor export outputs/run_001 --decisions outputs/run_001/review_decisions.json --out outputs/extractions.xlsx --allow-unreviewed</span><br>
+<span class="am">Wrote outputs/extractions.xlsx</span> <span class="out">(sheet titled "Client Template DRAFT", amber tab)</span><br>
+<span class="am">Wrote outputs/extractions.json &nbsp; Wrote outputs/extractions.audit.md</span><br><br>
+<span class="cmt"># 4 · make a real-shaped (is_demo:false) decisions file — NOT a product command, a dev helper</span><br>
+<span class="cmd">.venv/bin/python scripts/make_acceptance_decisions.py outputs/run_001 --out outputs/run_001/human_review_decisions.json</span><br><br>
+<span class="cmt"># 5 · OUTCOME C — reviewed decisions pass the gate → writes the TRUE FINAL workbook</span><br>
+<span class="cmd">.venv/bin/python -m earnings_extractor export outputs/run_001 --decisions outputs/run_001/human_review_decisions.json --out outputs/extractions_final.xlsx</span><br>
+<span class="gd">Wrote outputs/extractions_final.xlsx</span> <span class="out">(sheet titled "Client Template")</span><br>
+<span class="gd">Wrote outputs/extractions_final.json &nbsp; Wrote outputs/extractions_final.audit.md</span><br><br>
+<span class="cmt"># open the result (macOS)</span><br>
+<span class="cmd">open outputs/extractions_final.xlsx</span>
+  </div>
+
+  <div class="note amber"><b>What you should see:</b> step 2 fails with a non-zero exit and a clear reason. Step 3 writes three files; the workbook's first tab is named <b>Client Template DRAFT</b> with an amber tab colour and a comment on cell A1. Step 5 writes a workbook whose first tab is <b>Client Template</b> with two data rows — Tesla and Citi — formatted exactly like the client sample.</div>
+
+  <div class="note"><b>About step 4:</b> <code class="file">scripts/make_acceptance_decisions.py</code> lives outside the product CLI on purpose. It fabricates an <code>is_demo:false</code> file so you can exercise the final path locally, but it stamps the reviewer as <code>"SYNTHETIC ACCEPTANCE HELPER - not human reviewed"</code> in every audit artifact. Real approvals always come from a person clicking through <code class="file">review.html</code>. The product CLI has <b>no</b> way to manufacture human approvals.</div>
+
+  <!-- ======================= THE OUTPUT ======================= -->
+  <h2>What the final workbook looks like</h2>
+  <p class="muted">The first sheet <i>is</i> the client template — same headers, same per-column formats. Below is the real output for the two sample documents.</p>
+
+  <div class="xl">
+    <div class="xltabs">
+      <div class="xltab active">Client Template</div>
+      <div class="xltab">Metrics</div>
+      <div class="xltab">Review Decisions</div>
+      <div class="xltab">Evidence</div>
+    </div>
+    <div class="xlgrid">
+      <table class="sheet">
+        <thead><tr>
+          <th class="corner"></th><th>Company Name</th><th>Quarter</th><th>Total revenue</th><th>Earnings per share</th><th>Net income</th><th>Operating income</th><th>Gross margin</th><th>Operating expenses</th><th>Buybacks and dividends</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="corner">2</td><td>Tesla</td><td>Q2 2025</td><td class="num">$22.5B</td><td class="num">$0.33</td><td class="num">$1.2B</td><td class="num">$0.9B</td><td class="num">17%</td><td class="num">$3B</td><td class="empty">—</td></tr>
+          <tr><td class="corner">3</td><td>Citi</td><td>Q1 2025</td><td class="num">$21.6B</td><td class="num">$1.96</td><td class="num">$4.1B</td><td class="empty">—</td><td class="empty">—</td><td class="num">$13.4B</td><td>$2.8B capital returned, incl. $1.75B buybacks</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="note"><b>Reading the cells:</b> currency is text in billions (<code>$22.5B</code>), EPS is a real number with the template's <code>"$"#,##0.00</code> format, gross margin is the decimal <code>0.172</code> shown through a <code>0%</code> format (so "17%"). The blanks are correct, not bugs: Tesla reported no template buyback value, and "operating income" / "gross margin" aren't reported in template terms for a bank like Citi — each was resolved <code>not_applicable</code> with a note, which blanks the cell.</div>
+
+  <h3 style="margin-top:22px">The three artifacts every export writes</h3>
+  <table>
+    <tr><th>File</th><th>Open it with</th><th>What it's for</th></tr>
+    <tr><td class="mono file">extractions.xlsx</td><td>Excel / Numbers</td><td>The deliverable. Sheet 1 = client template; then <code>Metrics</code>, <code>Review Decisions</code>, <code>Evidence</code> tabs so any number is traceable to its source.</td></tr>
+    <tr><td class="mono file">extractions.json</td><td>code / scripts</td><td>Machine-readable mirror: run metadata, draft-vs-final flag, demo flag, client rows, metrics, decisions, evidence, and any warnings/blocking reasons.</td></tr>
+    <tr><td class="mono file">extractions.audit.md</td><td>any Markdown viewer</td><td>Human-readable summary: run id, final-vs-draft state, populated/blank counts, gate &amp; duplicate warnings, and an evidence list. (Stem-scoped name, so two exports never clobber each other.)</td></tr>
+  </table>
+
+  <!-- ======================= THE GATE ======================= -->
+  <h2>The review gate — the heart of Phase 6</h2>
+  <p class="muted">Decided by <code class="fn">_evaluate_export_gate()</code>. There are exactly three outcomes:</p>
+  <div class="three">
+    <div class="box red">
+      <h3 style="color:var(--red)">⛔ BLOCKED</h3>
+      <p class="muted" style="font-size:13px">Without <code>--allow-unreviewed</code>, any failing condition refuses the export with a non-zero exit and a list of reasons. Nothing is written.</p>
+    </div>
+    <div class="box amber">
+      <h3 style="color:var(--amber)">📝 DRAFT</h3>
+      <p class="muted" style="font-size:13px">With <code>--allow-unreviewed</code>, the same problems become <i>warnings</i>; the file is written but visibly marked draft/unreviewed (tab name, colour, A1 comment, JSON flag).</p>
+    </div>
+    <div class="box green">
+      <h3 style="color:var(--green)">✅ FINAL</h3>
+      <p class="muted" style="font-size:13px">A real (<code>is_demo:false</code>) decisions file with every required field resolved → a clean "Client Template" workbook, no draft markings.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:18px">What the gate refuses (without <code>--allow-unreviewed</code>)</h3>
+  <table>
+    <tr><th>Refuse when…</th><th>Why it matters</th></tr>
+    <tr><td class="mono fail">decisions.is_demo == true</td><td>Demo decisions are auto-generated, not human review. They can only ever produce a DRAFT.</td></tr>
+    <tr><td class="mono fail">a required field has no decision</td><td>Every one of the nine template columns must have been looked at.</td></tr>
+    <tr><td class="mono fail">attention field has no reviewer note</td><td>A flagged value needs an explicit, written human override — a bare <code>approved</code> isn't enough.</td></tr>
+    <tr><td class="mono fail">no metric extracted for a field</td><td class="blank">NEW · hardening</td></tr>
+  </table>
+  <div class="note amber"><b>The hardening (just added):</b> the gate now walks all nine template columns per document. If extraction produced <i>no metric at all</i> for a required column, a FINAL export is refused with <code>"No metric was extracted for required field …"</code> instead of silently shipping a blank cell. Under <code>--allow-unreviewed</code> it becomes a warning. This is exactly the failure mode an <b>unseen company</b> (Phase 7) could trigger — now it fails loudly.</div>
+
+  <h3 style="margin-top:18px">When does a cell actually get a value?</h3>
+  <p class="muted">Passing the gate is necessary but not sufficient — <code class="fn">_should_populate_cell()</code> decides each cell independently:</p>
+  <table>
+    <tr><th>Decision on the field</th><th>Resulting client cell</th></tr>
+    <tr><td class="mono">approved &nbsp;(value present)</td><td class="ok">populated</td></tr>
+    <tr><td class="mono">rejected / needs_fix</td><td class="blank">blank</td></tr>
+    <tr><td class="mono">not_applicable</td><td class="blank">blank</td></tr>
+    <tr><td class="mono">blank/null value</td><td class="blank">blank</td></tr>
+  </table>
+  <div class="note">So an attention field with <code>needs_fix</code> + note <i>passes the gate</i> (it was resolved) but its cell is left <b>blank</b> — the value didn't earn its way onto the client sheet. Only an explicit <code>approved</code> on a real value populates.</div>
+
+  <!-- ======================= CELL MAPPING ======================= -->
+  <h2>How raw numbers become client cells</h2>
+  <p class="muted"><code class="fn">map_metric_to_client_cell()</code> converts each canonical value into the client's format — and refuses to guess if the units look wrong.</p>
+  <table>
+    <tr><th>Template field</th><th>Stored as</th><th>Written as</th><th>Example</th></tr>
+    <tr><td>Total revenue · Net income · Operating income · Operating expenses</td><td class="mono">USD / millions</td><td>text, billions (1 dp, trailing .0 stripped)</td><td class="mono">22496 → $22.5B</td></tr>
+    <tr><td>Gross margin</td><td class="mono">percentage points</td><td>decimal, <code>0%</code> format</td><td class="mono">17.2 → 0.172 → "17%"</td></tr>
+    <tr><td>Earnings per share</td><td class="mono">USD/share</td><td>number, <code>"$"#,##0.00</code></td><td class="mono">0.33 → $0.33</td></tr>
+    <tr><td>Company · Quarter · Buybacks and dividends</td><td class="mono">text</td><td>text, verbatim</td><td class="mono">"Tesla", "Q2 2025"</td></tr>
+  </table>
+  <div class="note red"><b>Defensive units:</b> a currency cell is only written if <code>unit=="USD"</code> and <code>scale=="millions"</code>; gross margin only if <code>unit=="percentage points"</code>. If the upstream normalizer ever changes and a value arrives in the wrong unit, the export <b>raises</b> rather than silently emitting a wrong <code>$xB</code>. Loud failure beats a quietly wrong client number.</div>
+
+  <!-- ======================= GROUPING ======================= -->
+  <h2>Two documents → two rows, deterministically</h2>
+  <div class="two">
+    <div class="box">
+      <h3>🗂️ One row per source file</h3>
+      <p class="muted" style="font-size:13px">Metrics are grouped by their resolved <code>source_file</code> (robust even when a metric's <code>company</code> is missing), preserving first-seen draft order — so Tesla's row comes before Citi's, every time.</p>
+    </div>
+    <div class="box">
+      <h3>🎯 Duplicate tie-break</h3>
+      <p class="muted" style="font-size:13px">If two metrics claim the same column, one is chosen by a fixed priority: a cell-populating decision &gt; a resolved-but-blanking decision &gt; highest confidence &gt; earliest in draft order. Ties are recorded as warnings in the JSON and audit report.</p>
+    </div>
+  </div>
+
+  <!-- ======================= TESTS ======================= -->
+  <h2>How Phase 6 is proven</h2>
+  <p class="muted"><code class="file">tests/test_phase6_export.py</code> locks the behaviour in — part of the <b>62 passing</b> tests (was 61 before the absent-field hardening test). A sample of what's covered:</p>
+  <div class="two">
+    <div class="box">
+      <h3>Mapping &amp; formats</h3>
+      <p class="muted" style="font-size:13px"><code>22496→$22.5B</code>, <code>4100→$4.1B</code>, <code>150000→$150B</code>, <code>17.2→0.172</code>, EPS stays numeric; bad currency units raise. Workbook headers/formats match the template exactly; all three audit tabs exist.</p>
+    </div>
+    <div class="box">
+      <h3>The gate</h3>
+      <p class="muted" style="font-size:13px">Demo blocked without override; draft with it; synthetic real decisions produce a true final; bare <code>approved</code> on an attention field is blocked; a non-attention <code>rejected</code> blanks the cell without a note; <b>an absent template field blocks final but exports as draft with a warning.</b></p>
+    </div>
+  </div>
+  <div class="note green">Verified on the real data: Tesla eval <b>9/9</b>, Citi eval <b>9/9</b>, full suite <b>62 passed</b>, <code>ruff</code> clean, project-map check clean, <code>git diff --check</code> clean. The no-cheat wall holds — <code class="file">export.py</code> imports nothing from <code>evaluation</code>.</div>
+
+  <!-- ======================= PHASES ======================= -->
+  <h2>Where this sits in the plan</h2>
+  <div class="phases">
+    <div class="ph done"><div class="n">0–2</div>scaffold</div>
+    <div class="ph done"><div class="n">3 ✓</div>core pipeline</div>
+    <div class="ph done"><div class="n">4 ✓</div>trust + offline</div>
+    <div class="ph done"><div class="n">5 ✓</div>human review</div>
+    <div class="ph now"><div class="n">6 ▸ now</div>final export</div>
+    <div class="ph"><div class="n">7</div>≥90% gate</div>
+    <div class="ph"><div class="n">8–9</div>polish</div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch" style="background:#10241a;border:1px solid #1f4a2c"></span>done</span>
+    <span><span class="swatch" style="background:#10243b;border:1px solid var(--accent)"></span>current</span>
+    <span><span class="swatch" style="background:var(--panel);border:1px solid var(--line)"></span>upcoming</span>
+  </div>
+  <p style="margin-top:16px"><b>Phase 6 goal (met):</b> consume reviewed decisions and write the client-template workbook plus audit tabs — refusing to ship unreviewed or unextracted required fields unless an override visibly marks the file as draft. <b>Next, Phase 7:</b> push extraction accuracy to the ≥90% gate and add an unseen-company smoke test — where the new absent-field guard will earn its keep.</p>
+
+  <footer>Generated for the Strange Loop earnings-extractor · Phase 6 · reflects the actual code in <code>earnings_extractor/export.py</code>, <code>scripts/make_acceptance_decisions.py</code> &amp; <code>tests/test_phase6_export.py</code></footer>
+
+</div>
+</body>
+</html>
