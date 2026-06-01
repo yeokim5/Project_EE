@@ -20,6 +20,7 @@ import {
 } from "react";
 
 const PDFJS_VERSION = "3.11.174";
+const MAX_HOSTED_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 // Same-origin in production (Vercel serves api/*.py). For local dev, set
 // NEXT_PUBLIC_API_BASE=http://127.0.0.1:8000 in .env and run the Python server
@@ -71,7 +72,7 @@ type DocState = {
   source: DocSource;
 };
 
-type ApiError = { ok: false; error: string };
+type ApiError = { ok: false; error?: unknown; detail?: unknown };
 
 const sampleDocs: Array<{ id: "tesla" | "citi"; label: string }> = [
   { id: "tesla", label: "Tesla Q2 2025" },
@@ -158,9 +159,9 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        const body = (await response.json()) as ExtractResponse | ApiError;
+        const body = (await readApiJson(response)) as ExtractResponse | ApiError;
         if (!response.ok || !body.ok) {
-          throw new Error("error" in body ? body.error : "Extraction failed.");
+          throw new Error(apiErrorMessage(body, response.status));
         }
         collected.push({
           documentName: body.document_name,
@@ -189,7 +190,25 @@ export default function Home() {
       setError("Add at least one PDF.");
       return;
     }
-    void extractAll(files.map((file) => ({ kind: "file", file })));
+    const oversized = files.filter(
+      (file) => !sampleIdForFile(file) && file.size > MAX_HOSTED_UPLOAD_BYTES,
+    );
+    if (oversized.length) {
+      setError(
+        `${oversized[0].name} is ${formatFileSize(
+          oversized[0].size,
+        )}. The hosted upload path is capped at ${formatFileSize(
+          MAX_HOSTED_UPLOAD_BYTES,
+        )}; use Samples here, or run the local CLI/API path for larger PDFs.`,
+      );
+      return;
+    }
+    void extractAll(
+      files.map((file) => {
+        const sampleId = sampleIdForFile(file);
+        return sampleId ? { kind: "demo", id: sampleId } : { kind: "file", file };
+      }),
+    );
   }
 
   function updateDoc(index: number, next: Partial<DocState>) {
@@ -247,14 +266,14 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const body = (await response.json()) as
+      const body = (await readApiJson(response)) as
         | {
             ok: true;
             workbook: { filename: string; content_type: string; base64: string };
           }
         | ApiError;
       if (!response.ok || !body.ok) {
-        throw new Error("error" in body ? body.error : "Export failed.");
+        throw new Error(apiErrorMessage(body, response.status, "Export failed."));
       }
       downloadBase64(
         body.workbook.base64,
@@ -779,6 +798,59 @@ function coerceValue(raw: string): string | number | null {
     return numeric;
   }
   return trimmed;
+}
+
+function sampleIdForFile(file: File): "tesla" | "citi" | null {
+  const normalized = file.name.toLowerCase();
+  if (normalized.includes("tsla") || normalized.includes("tesla")) {
+    return "tesla";
+  }
+  if (normalized.includes("citi")) {
+    return "citi";
+  }
+  return null;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+async function readApiJson(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text.trim()) {
+    return { ok: false, error: `Server returned ${response.status}.` };
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: false, error: text.slice(0, 240) };
+  }
+}
+
+function apiErrorMessage(
+  body: { ok: true } | ApiError,
+  status: number,
+  fallback = "Extraction failed.",
+): string {
+  if (body.ok) return fallback;
+  const raw = body.error ?? body.detail;
+  if (typeof raw === "string" && raw.trim()) return raw;
+  if (raw && typeof raw === "object") {
+    const message = "message" in raw ? raw.message : null;
+    if (typeof message === "string" && message.trim()) return message;
+    try {
+      return JSON.stringify(raw);
+    } catch {
+      return fallback;
+    }
+  }
+  if (status >= 500) {
+    return "Live upload failed on the hosted API. Use Samples for Tesla/Citi, or run locally with OPENAI_API_KEY for arbitrary PDFs.";
+  }
+  return fallback;
 }
 
 function fileToBase64(file: File) {
