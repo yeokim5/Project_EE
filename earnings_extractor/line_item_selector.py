@@ -290,6 +290,12 @@ def apply_line_item_selection(
     for metric in metrics:
         if metric.metric_name not in FIELD_DEFINITIONS:
             continue
+        # The selector reads structured statement lines. On an earnings-call
+        # transcript the "lines" are prose sentences with scattered numbers
+        # ("...RoTCE of 9.1% on $21.6 billion of revenues..."), where first-number
+        # heuristics pick the wrong figure. Leave transcripts to the extractor.
+        if getattr(metric, "document_type", None) == "earnings_call_transcript":
+            continue
         page_text = page_text_by_number.get(metric.source_page) or full_text
         if not extract_candidate_lines(page_text, metric.metric_name):
             page_text = full_text
@@ -333,6 +339,21 @@ def apply_line_item_selection(
                 float(current) - value_millions
             ) <= max(1.0, abs(value_millions) * 0.001):
                 continue  # selector agrees with the extractor -- nothing to do
+            # Magnitude sanity: a line-item correction for the SAME metric (a
+            # composite vs the sales line) differs by tens of percent, never
+            # orders of magnitude. A >3x jump means the selected "line" was prose
+            # and the first-number pick is junk (Citi's 21,600 -> 1.96). Don't
+            # swap a plausible value for an implausible one.
+            if (
+                isinstance(current, int | float)
+                and current != 0
+                and value_millions != 0
+            ):
+                ratio = max(abs(value_millions), abs(float(current))) / min(
+                    abs(value_millions), abs(float(current))
+                )
+                if ratio > 3.0:
+                    continue
             metric.value = value_millions
             metric.unit = "USD"
             metric.scale = "millions"

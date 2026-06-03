@@ -189,6 +189,41 @@ def test_keeps_extractor_value_when_present_in_selected_line() -> None:
     assert metric.value == 155667.0
 
 
+def test_skips_transcript_documents() -> None:
+    # Citi guard: on a transcript the value lives in prose. The selector must not
+    # run -- the extractor's value is kept.
+    prose = "of $1.96 and an RoTCE of 9.1% on $21.6 billion of revenues, generating\n"
+    metric = MetricStub(
+        metric_name="Total revenue", value=21600.0, unit="USD", scale="millions",
+        source_page=1, source_quote="x", needs_review=False, review_reason=None,
+        document_type="earnings_call_transcript",
+    )
+    pages = [PageStub(page_number=1, text=prose)]
+    verdict = LineSelection(status="selected", value_text="of $1.96 and an RoTCE of 9.1% on $21.6 billion of revenues")
+    changed = apply_line_item_selection(
+        [metric], pages, CONFIG, "live", client=RoutingStubClient({"Total revenue": verdict})
+    )
+    assert changed == 0
+    assert metric.value == 21600.0
+
+
+def test_magnitude_guard_blocks_implausible_swap() -> None:
+    # Even in a report, a >3x jump (21,600 -> 1.96 from a prose first-number) is
+    # rejected; the plausible extracted value stays.
+    prose = "...RoTCE of 9.1% on $21.6 billion of revenues...\n"
+    metric = MetricStub(
+        metric_name="Total revenue", value=21600.0, unit="USD", scale="millions",
+        source_page=1, source_quote="x", needs_review=False, review_reason=None,
+    )
+    pages = [PageStub(page_number=1, text=prose)]
+    verdict = LineSelection(status="selected", value_text="9.1% on $21.6 billion of revenues")
+    changed = apply_line_item_selection(
+        [metric], pages, CONFIG, "live", client=RoutingStubClient({"Total revenue": verdict})
+    )
+    assert changed == 0
+    assert metric.value == 21600.0
+
+
 def test_operating_expenses_value_is_never_swapped() -> None:
     # The Amazon regression guard: even if the selector picks a different opex
     # line, a correct numeric opex is NOT replaced. Only blanking is allowed.
