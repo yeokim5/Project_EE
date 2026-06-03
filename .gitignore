@@ -11,6 +11,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 outputs/
+pdf_input/
+pdf_input_copy/
 *.egg-info/
 .vercel
 job_info
