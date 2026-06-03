@@ -38,6 +38,7 @@ from earnings_extractor.config import OpenAIConfig, load_openai_config
 from earnings_extractor.extractor import extract_metrics_live_with_usage
 from earnings_extractor.identity import apply_company_identity, resolve_company_identity
 from earnings_extractor.ingest import PageText, read_pdf_metadata, read_pdf_pages
+from earnings_extractor.line_item_selector import apply_line_item_selection
 from earnings_extractor.normalize import normalize_metrics
 from earnings_extractor.recorded import extract_metrics_recorded
 from earnings_extractor.schema import (
@@ -152,6 +153,15 @@ def process_single_pdf(
     _emit(progress, "normalizing...")
     repair_table_scale(metrics, pages)
     normalize_metrics(metrics)
+    # Definition-driven line-item correction (live only): the plain extractor
+    # routinely picks a line adjacent in meaning to the template field -- a
+    # composite ("revenues and other income") for Total revenue, a component
+    # (SG&A) for Operating expenses. Re-select the definition-matching line from
+    # the cited page, caged so the value stays grounded. Runs after normalize so
+    # the chosen line inherits the same validated table scale; flags every change.
+    if mode == "live":
+        _emit(progress, "checking line items...")
+        apply_line_item_selection(metrics, pages, config, mode)
     # Live extractions can mis-cite a page; snap each quote to the page that
     # actually contains it before the citation validator runs. Recorded
     # cassettes are already page-correct, so this stays live-only to keep
