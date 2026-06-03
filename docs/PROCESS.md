@@ -895,6 +895,54 @@ Run the relevant part of `docs/VERIFY.md` after each meaningful change.
 
 > Format: `YYYY-MM-DD-HH-MM — decision / client answer / assumption changed`
 
+- 2026-06-03-02-58 — Fixed two live-batch reliability misses with deterministic
+  evidence checks instead of LLM arbitration. Currency normalization now uses
+  explicit source-quote amounts to avoid double-scaling values the model already
+  converted to USD millions, covering American Express `$13.9 billion` operating
+  expenses -> `13900` USD millions. Capital-return enrichment now scans
+  normalized page text and appends a nearby quarterly dividend-per-share fact to
+  returned-capital/repurchase wording, covering BlackRock Q4 2025's `$5.0
+  billion` returned, `$1.6 billion` repurchases, and `$5.73` per-share dividend.
+  Added regression tests and verified with focused tests, full `pytest`, `ruff`,
+  recorded Tesla/Citi evals, and the recorded review/export gate.
+- 2026-06-03-00-00 — Added live progress output to the `batch` CLI.
+  `run_batch` now accepts an optional progress callback, and `process_single_pdf`
+  reports compact per-file stages: started, reading PDF, classifying, extracting,
+  preparing template rows, resolving company, normalizing, citation checking,
+  validating, done, and workbook writing.
+- 2026-06-03-00-20 — Changed batch extraction policy so deterministic document
+  classification is advisory, not a hard reject gate. If classification is
+  uncertain, live extraction now proceeds with an `earnings_report` fallback
+  rather than silently skipping a plausible PDF; deterministic code still ranks
+  pages and validates evidence/math after the model returns. Added regression
+  coverage for uncertain-classification extraction and earnings-results press
+  releases.
+- 2026-06-03-00-35 — Simplified document-type handling further: operational
+  extraction no longer changes behavior based on report-vs-transcript
+  classification. User-provided batch PDFs are treated as in-scope earnings
+  sources, and the same nine client fields are extracted with a generic
+  `earnings_report` schema hint. Classification remains audit metadata/page
+  context only; post-extraction validation/review flags remain the reliability
+  layer.
+- 2026-06-03-00-45 — Added a live-extraction heartbeat around the blocking
+  OpenAI call. The CLI cannot show a truthful percent complete inside a single
+  API request, so it now prints elapsed-time "still extracting metrics" updates
+  every 2 seconds during live extraction.
+- 2026-06-03-01-00 — Fixed same-company batch export grouping. Each extracted
+  metric now persists its exact input `source_file`, and review/export uses that
+  value before falling back to older inference. Added regression coverage that
+  two BlackRock PDFs with different quarters export as two client rows instead
+  of collapsing into one company row.
+- 2026-06-03-01-15 — Hardened live structured-output repair. Empty or missing
+  `source_quote` / `source_page` no longer fails an entire PDF; the affected row
+  is blanked, assigned placeholder evidence/page metadata, and flagged for
+  review so batch export can continue without silently claiming unsupported
+  values. This keeps the deterministic reliability layer after the LLM while
+  preserving one-row-per-PDF workbook output.
+  Verified with `.venv/bin/python -m pytest tests/test_scaffold.py
+  tests/test_cli_phase3.py -q`, `.venv/bin/python -m ruff check
+  earnings_extractor/batch.py earnings_extractor/cli.py
+  earnings_extractor/pipeline.py`, and a recorded one-PDF batch run.
 - 2026-06-01-11-19 — Removed product-facing "demo" positioning from the web app
   and README surfaces. The deployed app is now linked as
   `https://project-ee-one.vercel.app/`, the UI presents bundled Tesla/Citi files

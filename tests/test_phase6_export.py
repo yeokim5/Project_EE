@@ -7,6 +7,7 @@ from openpyxl import load_workbook
 from earnings_extractor.cli import main
 from earnings_extractor.export import (
     export_reviewed_run,
+    format_currency_batch_text,
     format_currency_billions,
     format_gross_margin_cell,
     map_metric_to_client_cell,
@@ -29,10 +30,40 @@ def test_client_cell_mappers() -> None:
     assert format_currency_billions(22496) == "$22.5B"
     assert format_currency_billions(4100) == "$4.1B"
     assert format_currency_billions(150000) == "$150B"
+    assert format_currency_batch_text(5276, "Total revenue 5,276") == "$5,276 million"
+    assert (
+        format_currency_batch_text(
+            13900,
+            "Consolidated expenses were $13.9 billion",
+        )
+        == "$13.9 billion"
+    )
     assert format_gross_margin_cell(17.2) == 0.172
 
     eps = _item(_metric("Earnings per share", 0.33, unit="USD/share"))
     assert map_metric_to_client_cell(eps) == 0.33
+    eps.value = 4.28
+    eps.source_quote = "Diluted EPS $4.28"
+    assert map_metric_to_client_cell(eps, display_mode="batch") == "$4.28 diluted"
+
+    capital_return = _item(
+        _metric(
+            "Buybacks and dividends",
+            (
+                "$5 billion returned in 2025, including $1.6 billion of "
+                "repurchases and $5.73 quarterly cash dividend per share"
+            ),
+            unit=None,
+            scale=None,
+        )
+    )
+    assert (
+        map_metric_to_client_cell(capital_return, display_mode="batch")
+        == (
+            "$5.0 billion returned in 2025, including $1.6 billion of "
+            "repurchases; $5.73 per share cash dividend"
+        )
+    )
 
 
 def test_mapper_rejects_unexpected_currency_units() -> None:
@@ -213,6 +244,128 @@ def test_export_cli_writes_artifact_paths(tmp_path: Path, capsys) -> None:
     assert "out.audit.md" in captured.out
 
 
+def test_same_company_different_source_files_export_as_separate_rows(
+    tmp_path: Path,
+) -> None:
+    source_a = "pdf_input/blackrock_q1_2025.pdf"
+    source_b = "pdf_input/blackrock_q4_2025.pdf"
+    metrics = _document_metrics(source_a, "BlackRock", "Q1 2025", revenue=5280)
+    metrics.extend(_document_metrics(source_b, "BlackRock", "Q4 2025", revenue=7008))
+    draft = DraftRun(
+        run_id="same-company",
+        created_at="2026-06-03T00:00:00Z",
+        mode="live",
+        model="test-model",
+        reasoning_effort="low",
+        documents=[
+            {
+                "source_file": source_a,
+                "document_type": "earnings_report",
+                "page_count": 10,
+            },
+            {
+                "source_file": source_b,
+                "document_type": "earnings_report",
+                "page_count": 10,
+            },
+        ],
+        classifications=[],
+        selected_pages={source_a: [1], source_b: [1]},
+        metrics=metrics,
+    )
+    (tmp_path / "draft_metrics.json").write_text(
+        draft.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    items = build_review_items(draft)
+    decisions = _decisions_for_items(draft, items)
+    decisions_path = tmp_path / "decisions.json"
+    decisions_path.write_text(decisions.model_dump_json(), encoding="utf-8")
+
+    export_reviewed_run(tmp_path, decisions_path, tmp_path / "out.xlsx")
+
+    worksheet = load_workbook(tmp_path / "out.xlsx").worksheets[0]
+    rows = list(worksheet.iter_rows(min_row=2, max_row=3, values_only=True))
+    assert rows[0][0:3] == ("BlackRock", "Q1 2025", "$5.3B")
+    assert rows[1][0:3] == ("BlackRock", "Q4 2025", "$7B")
+
+
+def test_batch_display_mode_uses_readable_units_and_missing_text(
+    tmp_path: Path,
+) -> None:
+    source = "pdf_input/blackrock_q1_2025.pdf"
+    metrics = _document_metrics(source, "BlackRock", "First Quarter 2025", 5276)
+    for metric in metrics:
+        if metric.metric_name == "Earnings per share":
+            metric.value = 9.64
+            metric.source_quote = "Diluted $ 9.64 $ 10.48"
+        elif metric.metric_name == "Net income":
+            metric.value = 1510.0
+        elif metric.metric_name == "Operating income":
+            metric.value = 1698.0
+        elif metric.metric_name == "Gross margin":
+            metric.value = None
+            metric.unit = None
+            metric.scale = None
+            metric.needs_review = True
+        elif metric.metric_name == "Operating expenses":
+            metric.value = 3578.0
+            metric.source_quote = "Total expense 3,578 3,035 543"
+        elif metric.metric_name == "Buybacks and dividends":
+            metric.value = (
+                "$375 million share repurchases and $5.21 quarterly cash "
+                "dividend per share"
+            )
+            metric.needs_review = True
+    draft = DraftRun(
+        run_id="batch-display",
+        created_at="2026-06-03T00:00:00Z",
+        mode="live",
+        model="test-model",
+        reasoning_effort="low",
+        documents=[
+            {
+                "source_file": source,
+                "document_type": "earnings_report",
+                "page_count": 10,
+            },
+        ],
+        classifications=[],
+        selected_pages={source: [1]},
+        metrics=metrics,
+    )
+    (tmp_path / "draft_metrics.json").write_text(
+        draft.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    items = build_review_items(draft)
+    decisions = _decisions_for_items(draft, items)
+    decisions_path = tmp_path / "decisions.json"
+    decisions_path.write_text(decisions.model_dump_json(), encoding="utf-8")
+
+    export_reviewed_run(
+        tmp_path,
+        decisions_path,
+        tmp_path / "out.xlsx",
+        allow_unreviewed=True,
+        display_mode="batch",
+    )
+
+    worksheet = load_workbook(tmp_path / "out.xlsx").worksheets[0]
+    row = [cell.value for cell in worksheet[2]]
+    assert row == [
+        "BlackRock",
+        "Q1 2025",
+        "$5,276 million",
+        "$9.64 diluted",
+        "$1,510 million",
+        "$1,698 million",
+        "Not disclosed",
+        "$3,578 million",
+        "$375 million share repurchases; $5.21 per share cash dividend",
+    ]
+
+
 def _item(metric: MetricRow):
     draft = DraftRun(
         run_id="mapper",
@@ -232,6 +385,43 @@ def _item(metric: MetricRow):
         metrics=[metric],
     )
     return build_review_items(draft)[0]
+
+
+def _document_metrics(
+    source_file: str,
+    company: str,
+    quarter: str,
+    revenue: float,
+) -> list[MetricRow]:
+    values = {
+        "Company Name": (company, None, None),
+        "Quarter": (quarter, None, None),
+        "Total revenue": (revenue, "USD", "millions"),
+        "Earnings per share": (1.0, "USD/share", None),
+        "Net income": (1000, "USD", "millions"),
+        "Operating income": (1200, "USD", "millions"),
+        "Gross margin": (10.0, "percentage points", None),
+        "Operating expenses": (2000, "USD", "millions"),
+        "Buybacks and dividends": ("$1B buybacks", None, None),
+    }
+    return [
+        MetricRow(
+            source_file=source_file,
+            company=company,
+            document_type="earnings_report",
+            fiscal_period=quarter,
+            metric_name=name,
+            metric_category="template",
+            value=value,
+            unit=unit,
+            scale=scale,
+            source_page=1,
+            source_quote=f"{name}: {value}",
+            confidence=0.99,
+            needs_review=False,
+        )
+        for name, (value, unit, scale) in values.items()
+    ]
 
 
 def _write_draft(tmp_path: Path, drop_fields: set[str] | None = None) -> DraftRun:

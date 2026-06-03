@@ -12,6 +12,7 @@ from earnings_extractor.validation import (
     PLACEHOLDER_SOURCE_QUOTE,
     check_free_cash_flow,
     complete_template_rows,
+    enrich_capital_return_text,
     validate_metrics,
 )
 
@@ -90,6 +91,51 @@ def test_citi_identity_uses_on_page_title_evidence() -> None:
     assert "Citi First Quarter 2025 Earnings Call" in identity.source_quote
 
 
+def test_filename_identity_uses_multi_token_name_and_source_casing() -> None:
+    pages = [
+        PageText(
+            source_file="pdf_input/american_express_q1_2026.pdf",
+            page_number=1,
+            text="AMERICAN EXPRESS\nQ1 2026 RESULTS",
+            char_count=32,
+        )
+    ]
+
+    identity = resolve_company_identity(
+        pages=pages,
+        metadata={},
+        source_file="pdf_input/american_express_q1_2026.pdf",
+        document_type="earnings_report",
+    )
+
+    assert identity is not None
+    assert identity.name == "American Express"
+    assert identity.source_quote == "AMERICAN EXPRESS"
+    assert identity.needs_review is False
+
+
+def test_filename_identity_preserves_mixed_case_branding() -> None:
+    pages = [
+        PageText(
+            source_file="pdf_input/blackrock_q1_2025.pdf",
+            page_number=1,
+            text="BlackRock Reports First Quarter 2025 Diluted EPS of $9.64",
+            char_count=60,
+        )
+    ]
+
+    identity = resolve_company_identity(
+        pages=pages,
+        metadata={},
+        source_file="pdf_input/blackrock_q1_2025.pdf",
+        document_type="earnings_report",
+    )
+
+    assert identity is not None
+    assert identity.name == "BlackRock"
+    assert "BlackRock Reports" in identity.source_quote
+
+
 def test_currency_normalization_handles_billions_and_millions() -> None:
     revenue = _metric("Total revenue", "$21.6B", unit=None, scale=None)
     net_income = _metric("Net income", 4.1, unit="USD", scale="billions")
@@ -101,6 +147,17 @@ def test_currency_normalization_handles_billions_and_millions() -> None:
     assert revenue.value == 21600
     assert net_income.value == 4100
     assert expenses.value == 13400
+
+
+def test_currency_normalization_uses_quote_to_prevent_double_billion_scaling() -> None:
+    expenses = _metric("Operating expenses", 13900, unit="USD", scale="billion")
+    expenses.source_quote = "Consolidated expenses were $13.9 billion, up 11"
+
+    normalize_metric(expenses)
+
+    assert expenses.value == 13900
+    assert expenses.unit == "USD"
+    assert expenses.scale == "millions"
 
 
 def test_currency_normalization_handles_thousands_scale() -> None:
@@ -129,6 +186,33 @@ def test_percentage_eps_and_capex_normalization() -> None:
     assert margin.value == 17.2
     assert eps.value == 1.96
     assert capex.value == 2394
+
+
+def test_capital_return_enrichment_includes_split_dividend_fact() -> None:
+    row = _metric("Buybacks and dividends", "$5.0 billion returned in 2025")
+    pages = [
+        PageText(
+            source_file="blackrock_q4_2025.pdf",
+            page_number=1,
+            text=(
+                "$5 billion returned to shareholders in 2025, including "
+                "$1.6 billion worth of share repurchases\n"
+                "10% increase in quarterly cash dividend to $5.73 per share "
+                "approved by Board of Directors"
+            ),
+            char_count=180,
+        )
+    ]
+
+    enrich_capital_return_text([row], pages)
+
+    assert row.value == (
+        "$5 billion returned in 2025, including $1.6 billion of repurchases "
+        "and $5.73 quarterly cash dividend per share"
+    )
+    assert row.source_page == 1
+    assert "$5.73 per share" in row.source_quote
+    assert row.needs_review is True
 
 
 def test_validation_flags_placeholder_and_low_confidence() -> None:

@@ -1,11 +1,20 @@
 import json
+import time
 from pathlib import Path
 
 from earnings_extractor.cli import main
 from earnings_extractor.config import OpenAIConfig
 from earnings_extractor.extractor import LiveExtractionResult
+from earnings_extractor.ingest import PageText
 from earnings_extractor.pipeline import find_pdf_inputs
-from earnings_extractor.schema import DraftRun, LLMUsage, MetricsBatch
+from earnings_extractor.schema import (
+    DocumentClassification,
+    DraftRun,
+    LLMUsage,
+    MetricRow,
+    MetricsBatch,
+    PageClassification,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TESLA = ROOT / "assesment_info" / "TSLA-Q2-2025-Update.pdf"
@@ -97,6 +106,221 @@ def test_extract_live_mode_writes_openai_usage(
     assert usage.output_tokens == 200
     assert usage.total_tokens == 1200
     assert usage.reasoning_tokens == 50
+
+
+def test_uncertain_classification_still_extracts(monkeypatch, tmp_path: Path) -> None:
+    from earnings_extractor.pipeline import process_single_pdf
+
+    pdf_path = tmp_path / "ambiguous.pdf"
+    pdf_path.write_bytes(b"%PDF-ambiguous")
+    page = PageText(
+        source_file=str(pdf_path),
+        page_number=1,
+        text="Q1 results Total revenue $10 Net income $2",
+        char_count=40,
+    )
+    classification = DocumentClassification(
+        source_file=str(pdf_path),
+        document_type="unknown",
+        page_count=1,
+        pages=[
+            PageClassification(
+                page_number=1,
+                style="mixed",
+                char_count=40,
+            )
+        ],
+    )
+    seen: dict[str, str] = {}
+
+    monkeypatch.setattr("earnings_extractor.pipeline.read_pdf_pages", lambda _: [page])
+    monkeypatch.setattr("earnings_extractor.pipeline.read_pdf_metadata", lambda _: {})
+    monkeypatch.setattr(
+        "earnings_extractor.pipeline.classify_document",
+        lambda _: classification,
+    )
+    monkeypatch.setattr(
+        "earnings_extractor.pipeline.select_extraction_pages",
+        lambda pages: pages,
+    )
+
+    def fake_extract_document_metrics(**kwargs):
+        seen["document_type"] = kwargs["document_type"]
+        return (
+            MetricsBatch(
+                metrics=[
+                    MetricRow(
+                        document_type="unknown",
+                        metric_name="Total revenue",
+                        metric_category="template",
+                        value=10,
+                        unit="USD",
+                        scale="millions",
+                        source_page=1,
+                        source_quote="Total revenue $10",
+                        confidence=0.9,
+                        needs_review=False,
+                    )
+                ]
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(
+        "earnings_extractor.pipeline._extract_document_metrics",
+        fake_extract_document_metrics,
+    )
+
+    processed = process_single_pdf(pdf_path, mode="live", config=None)
+
+    assert seen["document_type"] == "earnings_report"
+    assert processed.document is not None
+    assert processed.document.document_type == "earnings_report"
+    assert processed.metrics[0].document_type == "earnings_report"
+
+
+def test_classification_type_does_not_change_extraction_hint(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from earnings_extractor.pipeline import process_single_pdf
+
+    pdf_path = tmp_path / "transcript.pdf"
+    pdf_path.write_bytes(b"%PDF-transcript")
+    page = PageText(
+        source_file=str(pdf_path),
+        page_number=1,
+        text="Operator: Welcome to the earnings call. EPS was $1.00.",
+        char_count=55,
+    )
+    classification = DocumentClassification(
+        source_file=str(pdf_path),
+        document_type="earnings_call_transcript",
+        page_count=1,
+        pages=[
+            PageClassification(
+                page_number=1,
+                style="narrative",
+                char_count=55,
+            )
+        ],
+    )
+    seen: dict[str, str] = {}
+
+    monkeypatch.setattr("earnings_extractor.pipeline.read_pdf_pages", lambda _: [page])
+    monkeypatch.setattr("earnings_extractor.pipeline.read_pdf_metadata", lambda _: {})
+    monkeypatch.setattr(
+        "earnings_extractor.pipeline.classify_document",
+        lambda _: classification,
+    )
+    monkeypatch.setattr(
+        "earnings_extractor.pipeline.select_extraction_pages",
+        lambda pages: pages,
+    )
+
+    def fake_extract_document_metrics(**kwargs):
+        seen["document_type"] = kwargs["document_type"]
+        return (
+            MetricsBatch(
+                metrics=[
+                    MetricRow(
+                        document_type="earnings_call_transcript",
+                        metric_name="Earnings per share",
+                        metric_category="template",
+                        value=1.0,
+                        unit="USD/share",
+                        scale="ones",
+                        source_page=1,
+                        source_quote="EPS was $1.00.",
+                        confidence=0.9,
+                        needs_review=False,
+                    )
+                ]
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(
+        "earnings_extractor.pipeline._extract_document_metrics",
+        fake_extract_document_metrics,
+    )
+
+    processed = process_single_pdf(pdf_path, mode="live", config=None)
+
+    assert seen["document_type"] == "earnings_report"
+    assert processed.document is not None
+    assert processed.document.document_type == "earnings_report"
+
+
+def test_heartbeat_reports_long_running_operation() -> None:
+    from earnings_extractor.pipeline import _with_heartbeat
+
+    messages: list[str] = []
+
+    def slow_operation():
+        time.sleep(0.03)
+        return MetricsBatch(metrics=[]), None
+
+    result, usage = _with_heartbeat(
+        slow_operation,
+        progress=messages.append,
+        message="running",
+        enabled=True,
+        interval_seconds=0.01,
+    )
+
+    assert result.metrics == []
+    assert usage is None
+    assert any(message.startswith("running") for message in messages)
+
+
+def test_metrics_keep_exact_source_file_for_export_grouping(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from earnings_extractor.pipeline import process_single_pdf
+
+    pdf_path = tmp_path / "blackrock_q1_2025.pdf"
+    pdf_path.write_bytes(b"%PDF")
+    page = PageText(
+        source_file=str(pdf_path),
+        page_number=1,
+        text="Q1 2025 results Total revenue $10",
+        char_count=34,
+    )
+
+    monkeypatch.setattr("earnings_extractor.pipeline.read_pdf_pages", lambda _: [page])
+    monkeypatch.setattr("earnings_extractor.pipeline.read_pdf_metadata", lambda _: {})
+    monkeypatch.setattr(
+        "earnings_extractor.pipeline.select_extraction_pages",
+        lambda pages: pages,
+    )
+    monkeypatch.setattr(
+        "earnings_extractor.pipeline._extract_document_metrics",
+        lambda **_: (
+            MetricsBatch(
+                metrics=[
+                    MetricRow(
+                        document_type="earnings_report",
+                        metric_name="Total revenue",
+                        metric_category="template",
+                        value=10,
+                        unit="USD",
+                        scale="millions",
+                        source_page=1,
+                        source_quote="Total revenue $10",
+                        confidence=0.9,
+                        needs_review=False,
+                    )
+                ]
+            ),
+            None,
+        ),
+    )
+
+    processed = process_single_pdf(pdf_path, mode="live", config=None)
+
+    assert processed.metrics[0].source_file == str(pdf_path)
 
 
 def test_inspect_summarizes_draft_file(tmp_path: Path, capsys) -> None:

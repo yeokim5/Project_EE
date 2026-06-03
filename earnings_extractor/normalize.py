@@ -42,7 +42,10 @@ def normalize_metric(metric: MetricRow) -> None:
 
     if metric.metric_name in CURRENCY_TEMPLATE_FIELDS:
         normalized = normalize_currency_to_usd_millions(
-            metric.value, metric.unit, metric.scale
+            metric.value,
+            metric.unit,
+            metric.scale,
+            source_quote=metric.source_quote,
         )
         if normalized is None:
             _flag(metric, "Could not normalize currency value.")
@@ -74,13 +77,21 @@ def normalize_metric(metric: MetricRow) -> None:
 
 
 def normalize_currency_to_usd_millions(
-    value: Any, unit: str | None, scale: str | None
+    value: Any,
+    unit: str | None,
+    scale: str | None,
+    source_quote: str | None = None,
 ) -> float | None:
     number, detected_scale = _coerce_number_and_scale(value)
     if number is None:
         return None
 
     descriptor = f"{unit or ''} {scale or ''} {detected_scale or ''}".lower()
+    quote_amounts = _quote_currency_amounts_usd_millions(source_quote)
+    if quote_amounts and any(
+        _numbers_close(number, quote_amount) for quote_amount in quote_amounts
+    ):
+        return number
     if any(token in descriptor for token in ("billion", "billions")):
         return number * 1000.0
     if re.search(r"\bb\b", descriptor):
@@ -132,6 +143,44 @@ def _coerce_number_and_scale(value: Any) -> tuple[float | None, str | None]:
 def _coerce_number(value: Any) -> float | None:
     number, _scale = _coerce_number_and_scale(value)
     return number
+
+
+def _quote_currency_amounts_usd_millions(quote: str | None) -> list[float]:
+    """Return explicit currency amounts from evidence text in USD millions.
+
+    This is a guard against stale model metadata. If the model already converted
+    "$13.9 billion" to 13900 but left ``scale="billion"``, the evidence amount
+    proves 13900 is already the canonical USD-millions value and prevents a
+    second 1000x multiplication.
+    """
+
+    if not quote:
+        return []
+    amounts: list[float] = []
+    pattern = re.compile(
+        r"\$?\s*(\d[\d,]*(?:\.\d+)?)\s*"
+        r"(billions?|bn|b|millions?|m|thousands?|k)\b",
+        flags=re.IGNORECASE,
+    )
+    for match in pattern.finditer(quote):
+        raw_number, raw_scale = match.groups()
+        try:
+            number = float(raw_number.replace(",", ""))
+        except ValueError:
+            continue
+        scale_text = raw_scale.lower()
+        if scale_text in {"billion", "billions", "bn", "b"}:
+            amounts.append(number * 1000.0)
+        elif scale_text in {"thousand", "thousands", "k"}:
+            amounts.append(number / 1000.0)
+        else:
+            amounts.append(number)
+    return amounts
+
+
+def _numbers_close(left: float, right: float) -> bool:
+    tolerance = max(1.0, abs(right) * 0.001)
+    return abs(left - right) <= tolerance
 
 
 def _flag(metric: MetricRow, reason: str) -> None:

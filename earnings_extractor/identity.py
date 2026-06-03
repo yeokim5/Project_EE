@@ -53,9 +53,9 @@ def resolve_company_identity(
     for candidate in candidates:
         evidence = _find_on_page_evidence(candidate, pages)
         if evidence is not None:
-            page_number, quote = evidence
+            page_number, quote, evidence_name = evidence
             return IdentityCandidate(
-                name=candidate,
+                name=evidence_name,
                 ticker=None,
                 source_page=page_number,
                 source_quote=quote,
@@ -152,7 +152,36 @@ def _metadata_candidates(metadata: dict[str, str]) -> list[str]:
 def _filename_candidates(source_file: str) -> list[str]:
     stem = source_file.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     candidates = []
-    first_token = re.split(r"[-_\s]", stem, maxsplit=1)[0]
+    tokens = [token for token in re.split(r"[-_\s]+", stem) if token]
+    company_tokens: list[str] = []
+    for token in tokens:
+        lower = token.lower()
+        if (
+            re.fullmatch(r"q[1-4](?:\d{4})?", lower)
+            or re.fullmatch(r"[1-4]q\d{2,4}", lower)
+            or re.fullmatch(r"\d{4}", lower)
+            or lower
+            in {
+                "annual",
+                "earnings",
+                "earning",
+                "financial",
+                "press",
+                "release",
+                "report",
+                "results",
+                "update",
+            }
+        ):
+            break
+        company_tokens.append(token)
+
+    if company_tokens:
+        candidate = " ".join(company_tokens)
+        if not re.fullmatch(r"[A-Z]{1,5}", candidate):
+            candidates.append(candidate.title())
+
+    first_token = tokens[0] if tokens else ""
     if first_token and not re.fullmatch(r"[A-Z]{1,5}", first_token):
         candidates.append(first_token.title())
     return candidates
@@ -160,15 +189,27 @@ def _filename_candidates(source_file: str) -> list[str]:
 
 def _find_on_page_evidence(
     candidate: str, pages: list[PageText]
-) -> tuple[int, str] | None:
+) -> tuple[int, str, str] | None:
     if not candidate:
         return None
     pattern = re.compile(rf"\b{re.escape(candidate)}(?:['’]s)?\b", re.IGNORECASE)
     for page in pages:
         for line in page.text.splitlines():
-            if pattern.search(line):
-                return page.page_number, _trim_quote(line)
+            match = pattern.search(line)
+            if match:
+                return (
+                    page.page_number,
+                    _trim_quote(line),
+                    _canonicalize_matched_name(match.group(0)),
+                )
     return None
+
+
+def _canonicalize_matched_name(value: str) -> str:
+    value = re.sub(r"['’]s$", "", value.strip())
+    if value.isupper():
+        return value.title()
+    return value
 
 
 def _fallback_transcript_identity(pages: list[PageText]) -> IdentityCandidate | None:

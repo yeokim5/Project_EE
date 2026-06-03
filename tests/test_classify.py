@@ -118,3 +118,42 @@ def test_narrative_mention_of_earnings_call_stays_a_report() -> None:
     classification = classify_document(pages)
 
     assert classification.document_type == "earnings_report"
+
+
+def test_earnings_results_release_classifies_as_report() -> None:
+    pages = [
+        _page(
+            1,
+            "Q1 2026 RESULTS\n"
+            "Total Revenues Net of Interest Expense $18,907\n"
+            "Net Income $2,971\n"
+            "Diluted Earnings Per Common Share (EPS) $4.28",
+        )
+    ]
+
+    classification = classify_document(pages)
+
+    assert classification.document_type == "earnings_report"
+
+
+def test_earnings_release_with_conference_call_mention_stays_report() -> None:
+    pages = [
+        _page(
+            1,
+            "INVESTOR RELATIONS:\n"
+            "BlackRock Reports First Quarter 2025 Diluted EPS of $9.64\n"
+            "reported financial results for the three months ended March 31, 2025\n"
+            "Alternatives:\n"
+            "Institutional:\n"
+            "Conference call information follows.",
+        ),
+        _page(
+            2,
+            "Consolidated Statements of Income (unaudited)\n"
+            "Total revenue 5,280 Net income 1,508",
+        ),
+    ]
+
+    classification = classify_document(pages)
+
+    assert classification.document_type == "earnings_report"

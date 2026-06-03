@@ -32,6 +32,7 @@ python3 scripts/update_project_map.py --check
 |   |-- EarningsSample (1).xlsx
 |   `-- TSLA-Q2-2025-Update.pdf
 |-- docs/
+|   |-- ADAM_REPLY.md
 |   |-- CLIENT_BRIEF.md
 |   |-- CLIENT_REPLY.md
 |   |-- DATA_INSPECTION.md
@@ -51,6 +52,7 @@ python3 scripts/update_project_map.py --check
 |   |-- __init__.py
 |   |-- __main__.py
 |   |-- _eval_bridge.py
+|   |-- batch.py
 |   |-- classify.py
 |   |-- cli.py
 |   |-- config.py

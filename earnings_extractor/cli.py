@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from earnings_extractor import _eval_bridge
+from earnings_extractor.batch import run_batch
 from earnings_extractor.export import export_reviewed_run
 from earnings_extractor.pipeline import extract, inspect_draft
 from earnings_extractor.review import write_review_artifacts
@@ -18,6 +19,33 @@ def build_parser() -> argparse.ArgumentParser:
         description="Review-first earnings metric extraction workflow.",
     )
     subparsers = parser.add_subparsers(dest="command")
+
+    batch_parser = subparsers.add_parser(
+        "batch",
+        help=(
+            "Run a whole folder of PDFs into ONE Excel workbook. "
+            "Per-PDF errors are skipped, not fatal."
+        ),
+    )
+    batch_parser.add_argument(
+        "input_path",
+        type=Path,
+        nargs="?",
+        default=Path("pdf_input"),
+        help="Folder of PDFs (default: ./pdf_input).",
+    )
+    batch_parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("outputs/extractions.xlsx"),
+        help="Output .xlsx path (default: outputs/extractions.xlsx).",
+    )
+    batch_parser.add_argument(
+        "--mode",
+        choices=("live", "recorded"),
+        default="live",
+        help="live needs OPENAI_API_KEY; recorded replays bundled samples.",
+    )
 
     extract_parser = subparsers.add_parser("extract", help="Create draft metrics.")
     extract_parser.add_argument("input_path", type=Path)
@@ -65,6 +93,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
+        if args.command == "batch":
+            summary = run_batch(
+                args.input_path,
+                args.out,
+                args.mode,
+                progress=lambda message: print(message, flush=True),
+            )
+            print(summary.as_text(), end="")
+            return 0
         if args.command == "extract":
             draft_path = extract(args.input_path, args.out, args.mode)
             print(f"Wrote {draft_path}")

@@ -70,22 +70,15 @@ def enrich_capital_return_text(metrics: list[MetricRow], pages: list[PageText]) 
     if row is None:
         return
 
-    pattern = re.compile(
-        r"returned\s+\$([\d.]+)\s+billion\s+in\s+capital.*?"
-        r"including\s+\$([\d.]+)\s+billion\s+of\s+buybacks",
-        re.IGNORECASE,
-    )
     for page in pages:
-        for line in page.text.splitlines():
-            match = pattern.search(line)
-            if not match:
-                continue
-            capital, buybacks = match.groups()
-            row.value = f"${capital}B capital returned, including ${buybacks}B buybacks"
+        summary = _capital_return_summary(page.text)
+        if summary is not None:
+            value, quote = summary
+            row.value = value
             row.unit = None
             row.scale = None
             row.source_page = page.page_number
-            row.source_quote = _trim_quote(line)
+            row.source_quote = quote
             row.confidence = 0.85
             row.needs_review = True
             row.review_reason = (
@@ -287,6 +280,74 @@ def _numeric_value(metric: MetricRow | None) -> float | None:
     if metric is None or not isinstance(metric.value, int | float):
         return None
     return float(metric.value)
+
+
+def _capital_return_summary(text: str) -> tuple[str, str] | None:
+    page_text = _normalize_ws(text)
+    capital_patterns = (
+        (
+            re.compile(
+                r"\$([\d.]+)\s+billion\s+returned\s+to\s+shareholders\s+"
+                r"in\s+(\d{4}),\s+including\s+\$([\d.]+)\s+billion\s+"
+                r"(?:worth\s+of\s+)?share\s+.{0,160}?repurchases",
+                flags=re.IGNORECASE,
+            ),
+            "returned_with_year",
+        ),
+        (
+            re.compile(
+                r"returned\s+\$([\d.]+)\s+billion\s+in\s+capital.*?"
+                r"including\s+\$([\d.]+)\s+billion\s+of\s+"
+                r"(?:buybacks|share\s+repurchases|repurchases)",
+                flags=re.IGNORECASE,
+            ),
+            "returned_capital",
+        ),
+    )
+    dividend = _quarterly_dividend_per_share(page_text)
+    for pattern, kind in capital_patterns:
+        match = pattern.search(page_text)
+        if not match:
+            continue
+        if kind == "returned_with_year":
+            capital, year, repurchases = match.groups()
+            value = (
+                f"${capital} billion returned in {year}, including "
+                f"${repurchases} billion of repurchases"
+            )
+        else:
+            capital, repurchases = match.groups()
+            value = (
+                f"${capital}B capital returned, including "
+                f"${repurchases}B buybacks"
+            )
+        quote = _trim_quote(match.group(0))
+        if dividend is not None:
+            dividend_value, dividend_quote = dividend
+            value += f" and ${dividend_value} quarterly cash dividend per share"
+            quote = _trim_quote(f"{quote}; {dividend_quote}")
+        return value, quote
+    return None
+
+
+def _quarterly_dividend_per_share(text: str) -> tuple[str, str] | None:
+    patterns = (
+        re.compile(
+            r"quarterly\s+cash\s+dividend\s+(?:was\s+)?(?:increased\s+)?"
+            r"(?:\d+%\s+)?(?:to|of)?\s*\$([\d.]+)\s+per\s+share",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            r"(?:\d+%\s+)?increase\s+in\s+quarterly\s+cash\s+dividend\s+"
+            r"(?:to|of)\s+\$([\d.]+)\s+per\s+share",
+            flags=re.IGNORECASE,
+        ),
+    )
+    for pattern in patterns:
+        match = pattern.search(text)
+        if match:
+            return match.group(1), _trim_quote(match.group(0))
+    return None
 
 
 def _value_appears_in_quote(value: float, quote: str) -> bool:

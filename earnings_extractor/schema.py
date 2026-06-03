@@ -25,6 +25,7 @@ TEMPLATE_FIELDS = (
     "Operating expenses",
     "Buybacks and dividends",
 )
+MISSING_EVIDENCE_SOURCE_QUOTE = "No supporting source quote returned by extractor"
 
 
 class PageClassification(BaseModel):
@@ -47,6 +48,7 @@ class DocumentClassification(BaseModel):
 class MetricRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    source_file: str | None = None
     company: str | None = None
     ticker: str | None = None
     document_type: DocumentType = "unknown"
@@ -69,7 +71,7 @@ class MetricRow(BaseModel):
     review_status: ReviewStatus = "pending"
     reviewer_note: str | None = None
 
-    @field_validator("metric_name", "source_quote")
+    @field_validator("metric_name")
     @classmethod
     def non_empty_text(cls, value: str) -> str:
         value = value.strip()
@@ -135,7 +137,7 @@ def repair_metric_batch(payload: Any) -> MetricsBatch:
     """Validate structured model output, repairing only harmless wrappers/casing."""
 
     if isinstance(payload, MetricsBatch):
-        return payload
+        payload = payload.model_dump(mode="json")
 
     if isinstance(payload, list):
         payload = {"metrics": payload}
@@ -167,7 +169,27 @@ def _repair_metric_row(row: Any) -> Any:
         repaired["document_type"] = repaired["document_type"].strip().lower()
     if isinstance(repaired.get("review_status"), str):
         repaired["review_status"] = repaired["review_status"].strip().lower()
+    if not str(repaired.get("source_quote") or "").strip():
+        _blank_and_flag(
+            repaired,
+            "Extractor returned this row without source_quote; value was blanked.",
+        )
+        repaired["source_quote"] = MISSING_EVIDENCE_SOURCE_QUOTE
+    if not isinstance(repaired.get("source_page"), int):
+        _blank_and_flag(
+            repaired,
+            "Extractor returned this row without source_page; value was blanked.",
+        )
+        repaired["source_page"] = 1
     return repaired
+
+
+def _blank_and_flag(row: dict[str, Any], reason: str) -> None:
+    row["value"] = None
+    row["confidence"] = min(float(row.get("confidence") or 0.0), 0.0)
+    row["needs_review"] = True
+    existing = str(row.get("review_reason") or "").strip()
+    row["review_reason"] = f"{existing}; {reason}" if existing else reason
 
 
 def load_draft(path: Path) -> DraftRun:

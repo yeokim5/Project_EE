@@ -10,6 +10,28 @@ Format per entry:
 
 ---
 
+## 2026-06-03 — Evidence-first normalization for scale and combined capital returns
+
+- **Decision:** Keep the LLM as a candidate extractor only. Deterministic code now
+  lets explicit evidence amounts prevent double unit scaling, and capital-return
+  enrichment scans normalized page text so a buyback sentence and a nearby
+  dividend-per-share sentence can populate the combined "Buybacks and dividends"
+  field together.
+- **Alternatives:** Ask the LLM to decide whether a value like `13900` with
+  `scale="billion"` should be trusted, or let the reviewer catch incomplete
+  buyback/dividend wording manually.
+- **Reason:** A 1000x currency error and a split-sentence capital-return miss are
+  reliability-layer problems, not judgment calls. Source evidence such as
+  "$13.9 billion" deterministically implies `13900` USD millions, and a template
+  column named "Buybacks and dividends" should be marked/filled from both
+  components when both are present on the cited page.
+- **Consequences:** Normalization now depends on `source_quote` for explicit
+  currency-scale guardrails, while still falling back to the extracted unit/scale
+  metadata when the quote has no explicit amount. Capital-return enrichment is
+  more tolerant of PDF layout text inserted between words such as "share" and
+  "repurchases"; the resulting combined field remains review-flagged for human
+  approval.
+
 ## 2026-05-31 — Pixel-accurate citations via a deterministic locator + standalone viewer (Phase 10 slice)
 
 - **Decision:** Build the hardest, most reusable piece of Phase 10 now — a

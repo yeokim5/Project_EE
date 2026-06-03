@@ -18,10 +18,11 @@ blank rather than guessed.
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from copy import copy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from openpyxl import load_workbook
 from openpyxl.comments import Comment
@@ -46,6 +47,7 @@ CURRENCY_TEMPLATE_FIELDS = {
 GROSS_MARGIN_FIELD = "Gross margin"
 EPS_FIELD = "Earnings per share"
 NON_POPULATING_STATUSES = {"rejected", "needs_fix", "not_applicable"}
+ExportDisplayMode = Literal["template", "batch"]
 
 
 class ExportArtifacts(BaseModel):
@@ -86,6 +88,7 @@ def export_reviewed_run(
     decisions_path: Path,
     out_path: Path,
     allow_unreviewed: bool = False,
+    display_mode: ExportDisplayMode = "template",
 ) -> ExportArtifacts:
     draft = _load_draft(run_dir / "draft_metrics.json")
     review_items = build_review_items(draft)
@@ -97,6 +100,7 @@ def export_reviewed_run(
         review_items,
         decisions_by_metric_id,
         allow_unreviewed,
+        display_mode,
     )
     gate = _evaluate_export_gate(
         review_items=review_items,
@@ -144,11 +148,26 @@ def format_currency_billions(value: float | int) -> str:
     return f"${rendered}B"
 
 
+def format_currency_millions(value: float | int) -> str:
+    return f"${float(value):,.0f} million"
+
+
+def format_currency_batch_text(value: float | int, source_quote: str) -> str:
+    if re.search(r"\bbillions?\b", source_quote, flags=re.IGNORECASE):
+        billions = float(value) / 1000.0
+        rendered = f"{billions:.1f}".rstrip("0").rstrip(".")
+        return f"${rendered} billion"
+    return format_currency_millions(value)
+
+
 def format_gross_margin_cell(value: float | int) -> float:
     return float(value) / 100.0
 
 
-def map_metric_to_client_cell(item: ReviewItem) -> Any:
+def map_metric_to_client_cell(
+    item: ReviewItem,
+    display_mode: ExportDisplayMode = "template",
+) -> Any:
     if item.value in (None, ""):
         return ""
     if item.metric_name in CURRENCY_TEMPLATE_FIELDS:
@@ -158,6 +177,8 @@ def map_metric_to_client_cell(item: ReviewItem) -> Any:
                 f"{item.metric_name} must be USD millions before export; got "
                 f"unit={item.unit!r}, scale={item.scale!r}."
             )
+        if display_mode == "batch":
+            return format_currency_batch_text(float(item.value), item.source_quote)
         return format_currency_billions(float(item.value))
     if item.metric_name == GROSS_MARGIN_FIELD:
         _require_numeric(item)
@@ -166,10 +187,23 @@ def map_metric_to_client_cell(item: ReviewItem) -> Any:
                 "Gross margin must be percentage points before export; got "
                 f"unit={item.unit!r}."
             )
+        if display_mode == "batch":
+            return f"{float(item.value):g}%"
         return format_gross_margin_cell(float(item.value))
     if item.metric_name == EPS_FIELD:
         _require_numeric(item)
+        if display_mode == "batch":
+            suffix = (
+                " diluted"
+                if re.search(r"\bdiluted\b", item.source_quote, flags=re.IGNORECASE)
+                else ""
+            )
+            return f"${float(item.value):g}{suffix}"
         return float(item.value)
+    if display_mode == "batch" and item.metric_name == "Quarter":
+        return _compact_quarter(str(item.value))
+    if display_mode == "batch" and item.metric_name == "Buybacks and dividends":
+        return _clean_capital_return_text(str(item.value))
     return str(item.value)
 
 
@@ -230,6 +264,7 @@ def _build_client_rows(
     review_items: list[ReviewItem],
     decisions_by_metric_id: dict[str, ReviewDecision],
     allow_unreviewed: bool,
+    display_mode: ExportDisplayMode,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     rows: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -254,11 +289,49 @@ def _build_client_rows(
                 decisions_by_metric_id.get(chosen.metric_id),
                 allow_unreviewed,
             ):
-                row[field] = ""
+                row[field] = _missing_client_value(field, display_mode)
             else:
-                row[field] = map_metric_to_client_cell(chosen)
+                row[field] = map_metric_to_client_cell(chosen, display_mode)
         rows.append(row)
     return rows, warnings
+
+
+def _missing_client_value(field: str, display_mode: ExportDisplayMode) -> str:
+    if display_mode != "batch":
+        return ""
+    if field == "Buybacks and dividends":
+        return "Not disclosed in this release"
+    return "Not disclosed"
+
+
+def _compact_quarter(value: str) -> str:
+    match = re.fullmatch(
+        r"(First|Second|Third|Fourth)\s+Quarter\s+(\d{4})",
+        value.strip(),
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return value
+    quarter = {
+        "first": "Q1",
+        "second": "Q2",
+        "third": "Q3",
+        "fourth": "Q4",
+    }[match.group(1).lower()]
+    return f"{quarter} {match.group(2)}"
+
+
+def _clean_capital_return_text(value: str) -> str:
+    value = re.sub(r"\bworth of share repurchases\b", "of repurchases", value)
+    value = re.sub(r"\bto shareholders\b", "", value)
+    value = re.sub(r"\bincreased to\b", "of", value)
+    value = re.sub(
+        r"\sand\s+(\$\d+(?:\.\d+)?)\s+quarterly cash dividend per share\b",
+        r"; \1 per share cash dividend",
+        value,
+    )
+    value = re.sub(r"^\$(\d+)\s+billion returned", r"$\1.0 billion returned", value)
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def _choose_template_item(

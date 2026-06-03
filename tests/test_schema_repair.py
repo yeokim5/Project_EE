@@ -1,7 +1,9 @@
-import pytest
-from pydantic import ValidationError
-
-from earnings_extractor.schema import DraftRun, repair_metric_batch
+from earnings_extractor.schema import (
+    MISSING_EVIDENCE_SOURCE_QUOTE,
+    DraftRun,
+    MetricsBatch,
+    repair_metric_batch,
+)
 
 VALID_ROW = {
     "company": "Tesla",
@@ -40,20 +42,55 @@ def test_list_wrapped_payload_repairs_to_metric_batch() -> None:
     assert len(batch.metrics) == 1
 
 
-def test_missing_source_quote_is_rejected() -> None:
+def test_missing_source_quote_blanks_and_flags_row() -> None:
     row = dict(VALID_ROW)
     row.pop("source_quote")
 
-    with pytest.raises(ValidationError):
-        repair_metric_batch({"metrics": [row]})
+    batch = repair_metric_batch({"metrics": [row]})
+
+    metric = batch.metrics[0]
+    assert metric.value is None
+    assert metric.source_quote == MISSING_EVIDENCE_SOURCE_QUOTE
+    assert metric.confidence == 0
+    assert metric.needs_review is True
+    assert "without source_quote" in (metric.review_reason or "")
 
 
-def test_missing_source_page_is_rejected() -> None:
+def test_empty_source_quote_blanks_and_flags_row() -> None:
+    row = {**VALID_ROW, "source_quote": "   "}
+
+    batch = repair_metric_batch({"metrics": [row]})
+
+    metric = batch.metrics[0]
+    assert metric.value is None
+    assert metric.source_quote == MISSING_EVIDENCE_SOURCE_QUOTE
+    assert metric.needs_review is True
+
+
+def test_empty_source_quote_repairs_after_pydantic_parse() -> None:
+    parsed = MetricsBatch.model_validate(
+        {"metrics": [{**VALID_ROW, "source_quote": ""}]}
+    )
+
+    batch = repair_metric_batch(parsed)
+
+    metric = batch.metrics[0]
+    assert metric.value is None
+    assert metric.source_quote == MISSING_EVIDENCE_SOURCE_QUOTE
+    assert metric.needs_review is True
+
+
+def test_missing_source_page_blanks_and_flags_row() -> None:
     row = dict(VALID_ROW)
     row.pop("source_page")
 
-    with pytest.raises(ValidationError):
-        repair_metric_batch({"metrics": [row]})
+    batch = repair_metric_batch({"metrics": [row]})
+
+    metric = batch.metrics[0]
+    assert metric.value is None
+    assert metric.source_page == 1
+    assert metric.needs_review is True
+    assert "without source_page" in (metric.review_reason or "")
 
 
 def test_enum_casing_is_safely_normalized() -> None:

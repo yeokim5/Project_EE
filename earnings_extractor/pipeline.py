@@ -21,6 +21,10 @@ The model's confidence is just one of several reasons a row can be flagged.
 from __future__ import annotations
 
 import json
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -33,6 +37,7 @@ from earnings_extractor.ingest import PageText, read_pdf_metadata, read_pdf_page
 from earnings_extractor.normalize import normalize_metrics
 from earnings_extractor.recorded import extract_metrics_recorded
 from earnings_extractor.schema import (
+    DocumentType,
     DraftRun,
     LLMUsage,
     MetricsBatch,
@@ -59,6 +64,141 @@ def find_pdf_inputs(input_path: Path) -> list[Path]:
     raise FileNotFoundError(input_path)
 
 
+@dataclass
+class ProcessedDocument:
+    """Everything one PDF contributes to a draft run.
+
+    ``document`` is reserved for future hard-skips. In normal batch/live runs,
+    ambiguous classification is treated as an extraction hint, not a reason to
+    skip the file.
+    """
+
+    source_file: str
+    document: SourceDocument | None
+    classification: object
+    selected_pages: list[int]
+    usage: LLMUsage | None
+    metrics: list
+
+
+def process_single_pdf(
+    pdf_path: Path,
+    mode: str,
+    config: OpenAIConfig | None,
+    progress: Callable[[str], None] | None = None,
+) -> ProcessedDocument:
+    """Run the full per-document pipeline for one PDF.
+
+    This is the unit of work shared by the single-run ``extract`` path and the
+    resilient ``batch`` path. It raises on any genuine failure (unreadable PDF,
+    failed model call, validation error); the batch runner wraps it so one bad
+    file never sinks the others.
+    """
+
+    _emit(progress, "reading PDF...")
+    pages = read_pdf_pages(pdf_path)
+    metadata = read_pdf_metadata(pdf_path)
+    _emit(progress, "checking document...")
+    classification = classify_document(pages)
+    # For user-supplied batch folders, classification is audit metadata and page
+    # context only. It must not decide whether extraction runs, and it must not
+    # over-specialize the prompt. The product goal is the same nine-field
+    # extraction for earnings releases, reports, and call transcripts.
+    document_type: DocumentType = "earnings_report"
+    if classification.document_type == "unknown":
+        _emit(progress, "document type uncertain; extracting anyway...")
+    pages_for_extraction = select_extraction_pages(pages)
+    _emit(progress, f"extracting metrics ({mode})...")
+    batch, usage = _with_heartbeat(
+        lambda: _extract_document_metrics(
+            pdf_path=pdf_path,
+            pages=pages_for_extraction,
+            document_type=document_type,
+            mode=mode,
+            config=config,
+        ),
+        progress=progress,
+        message="running",
+        enabled=mode == "live",
+    )
+    metrics = list(batch.metrics)
+    for metric in metrics:
+        metric.source_file = str(pdf_path)
+        if metric.document_type == "unknown":
+            metric.document_type = document_type
+    _emit(progress, "preparing template rows...")
+    complete_template_rows(
+        metrics,
+        document_type,
+        pages_for_extraction,
+    )
+    _emit(progress, "resolving company...")
+    identity = resolve_company_identity(
+        pages=pages,
+        metadata=metadata,
+        source_file=str(pdf_path),
+        document_type=document_type,
+    )
+    apply_company_identity(metrics, identity)
+    enrich_capital_return_text(metrics, pages)
+    _emit(progress, "normalizing...")
+    normalize_metrics(metrics)
+    # Live extractions can mis-cite a page; snap each quote to the page that
+    # actually contains it before the citation validator runs. Recorded
+    # cassettes are already page-correct, so this stays live-only to keep
+    # demo output byte-for-byte deterministic.
+    if mode == "live":
+        _emit(progress, "checking citations...")
+        repair_source_pages(metrics, pages)
+    _emit(progress, "validating...")
+    validate_metrics(metrics, pages)
+
+    return ProcessedDocument(
+        source_file=str(pdf_path),
+        document=SourceDocument(
+            source_file=str(pdf_path),
+            document_type=document_type,
+            page_count=len(pages),
+        ),
+        classification=classification,
+        selected_pages=[page.page_number for page in pages_for_extraction],
+        usage=usage,
+        metrics=metrics,
+    )
+
+
+def _emit(progress: Callable[[str], None] | None, message: str) -> None:
+    if progress is not None:
+        progress(message)
+
+
+def _with_heartbeat(
+    operation: Callable[[], tuple[MetricsBatch, LLMUsage | None]],
+    progress: Callable[[str], None] | None,
+    message: str,
+    enabled: bool,
+    interval_seconds: float = 2.0,
+) -> tuple[MetricsBatch, LLMUsage | None]:
+    if progress is None or not enabled:
+        return operation()
+
+    started = time.monotonic()
+    stop = threading.Event()
+
+    def beat() -> None:
+        while not stop.wait(interval_seconds):
+            elapsed = int(time.monotonic() - started)
+            _emit(progress, f"{message} - {elapsed}s elapsed...")
+
+    thread = threading.Thread(target=beat, daemon=True)
+    thread.start()
+    try:
+        return operation()
+    finally:
+        stop.set()
+        thread.join(timeout=0.1)
+
+
 def extract(input_path: Path, out_dir: Path, mode: str) -> Path:
     if mode not in {"live", "recorded"}:
         raise ValueError(f"Unsupported mode: {mode}")
@@ -76,66 +216,22 @@ def extract(input_path: Path, out_dir: Path, mode: str) -> Path:
     all_metrics = []
 
     for pdf_path in pdf_paths:
-        pages = read_pdf_pages(pdf_path)
-        metadata = read_pdf_metadata(pdf_path)
-        classification = classify_document(pages)
-        if classification.document_type == "unknown":
+        processed = process_single_pdf(pdf_path, mode, config)
+        if processed.document is None:
             continue
-        pages_for_extraction = select_extraction_pages(pages)
-        batch, usage = _extract_document_metrics(
-            pdf_path=pdf_path,
-            pages=pages_for_extraction,
-            document_type=classification.document_type,
-            mode=mode,
-            config=config,
-        )
-        if usage is not None:
-            llm_usage.append(usage)
-        metrics = list(batch.metrics)
-        complete_template_rows(
-            metrics,
-            classification.document_type,
-            pages_for_extraction,
-        )
-        identity = resolve_company_identity(
-            pages=pages,
-            metadata=metadata,
-            source_file=str(pdf_path),
-            document_type=classification.document_type,
-        )
-        apply_company_identity(metrics, identity)
-        enrich_capital_return_text(metrics, pages)
-        normalize_metrics(metrics)
-        # Live extractions can mis-cite a page; snap each quote to the page that
-        # actually contains it before the citation validator runs. Recorded
-        # cassettes are already page-correct, so this stays live-only to keep
-        # demo output byte-for-byte deterministic.
-        if mode == "live":
-            repair_source_pages(metrics, pages)
-        validate_metrics(metrics, pages)
-
-        documents.append(
-            SourceDocument(
-                source_file=str(pdf_path),
-                document_type=classification.document_type,
-                page_count=len(pages),
-            )
-        )
-        classifications.append(classification)
-        selected_pages[str(pdf_path)] = [
-            page.page_number for page in pages_for_extraction
-        ]
-        all_metrics.extend(metrics)
+        if processed.usage is not None:
+            llm_usage.append(processed.usage)
+        documents.append(processed.document)
+        classifications.append(processed.classification)
+        selected_pages[str(pdf_path)] = processed.selected_pages
+        all_metrics.extend(processed.metrics)
 
     if not documents:
         raise ValueError(f"No supported earnings PDFs found in {input_path}")
 
-    draft = DraftRun(
-        run_id=new_run_id(),
-        created_at=utc_now_iso(),
+    draft = build_draft_run(
         mode=mode,
-        model=config.model if config is not None else "recorded",
-        reasoning_effort=config.reasoning_effort if config is not None else None,
+        config=config,
         documents=documents,
         classifications=classifications,
         selected_pages=selected_pages,
@@ -148,6 +244,29 @@ def extract(input_path: Path, out_dir: Path, mode: str) -> Path:
         encoding="utf-8",
     )
     return draft_path
+
+
+def build_draft_run(
+    mode: str,
+    config: OpenAIConfig | None,
+    documents: list[SourceDocument],
+    classifications: list,
+    selected_pages: dict[str, list[int]],
+    llm_usage: list[LLMUsage],
+    metrics: list,
+) -> DraftRun:
+    return DraftRun(
+        run_id=new_run_id(),
+        created_at=utc_now_iso(),
+        mode=mode,
+        model=config.model if config is not None else "recorded",
+        reasoning_effort=config.reasoning_effort if config is not None else None,
+        documents=documents,
+        classifications=classifications,
+        selected_pages=selected_pages,
+        llm_usage=llm_usage,
+        metrics=metrics,
+    )
 
 
 def _extract_document_metrics(

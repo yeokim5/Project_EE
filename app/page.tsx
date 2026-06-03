@@ -142,40 +142,64 @@ export default function Home() {
   async function extractAll(sources: DocSource[]) {
     setError(null);
     const collected: DocState[] = [];
+    // One bad PDF must never sink the batch. Each file is isolated: failures are
+    // collected and skipped, and review proceeds with whatever succeeded.
+    const failures: string[] = [];
     try {
       for (let index = 0; index < sources.length; index += 1) {
         setProgress(`Extracting ${index + 1} of ${sources.length}…`);
         const source = sources[index];
-        const payload =
-          source.kind === "demo"
-            ? { mode: "recorded", demoDocument: source.id }
-            : {
-                mode: "live",
-                filename: source.file.name,
-                fileBase64: await fileToBase64(source.file),
-              };
-        const response = await fetch(`${API_BASE}/api/extract`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const body = (await readApiJson(response)) as ExtractResponse | ApiError;
-        if (!response.ok || !body.ok) {
-          throw new Error(apiErrorMessage(body, response.status));
+        const label =
+          source.kind === "demo" ? source.id : source.file.name;
+        try {
+          const payload =
+            source.kind === "demo"
+              ? { mode: "recorded", demoDocument: source.id }
+              : {
+                  mode: "live",
+                  filename: source.file.name,
+                  fileBase64: await fileToBase64(source.file),
+                };
+          const response = await fetch(`${API_BASE}/api/extract`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const body = (await readApiJson(response)) as
+            | ExtractResponse
+            | ApiError;
+          if (!response.ok || !body.ok) {
+            throw new Error(apiErrorMessage(body, response.status));
+          }
+          collected.push({
+            documentName: body.document_name,
+            draft: body.draft,
+            metrics: body.metrics,
+            source,
+          });
+        } catch (caught) {
+          const reason =
+            caught instanceof Error ? caught.message : "extraction failed";
+          failures.push(`${label}: ${reason}`);
         }
-        collected.push({
-          documentName: body.document_name,
-          draft: body.draft,
-          metrics: body.metrics,
-          source,
-        });
+      }
+      if (collected.length === 0) {
+        setError(
+          `All ${sources.length} document(s) failed.\n` + failures.join("\n"),
+        );
+        return;
       }
       setDocs(collected);
       setActiveDoc(0);
       setActiveMetric(0);
       setStep("review");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Extraction failed.");
+      if (failures.length) {
+        setError(
+          `Skipped ${failures.length} of ${sources.length} document(s); ` +
+            `showing the ${collected.length} that succeeded.\n` +
+            failures.join("\n"),
+        );
+      }
     } finally {
       setProgress(null);
     }
@@ -424,7 +448,7 @@ export default function Home() {
           {error ? (
             <div className="status-box error" style={{ marginTop: 18 }}>
               <strong>Could not extract</strong>
-              <p>{error}</p>
+              <p style={{ whiteSpace: "pre-line" }}>{error}</p>
             </div>
           ) : null}
         </div>
@@ -534,7 +558,7 @@ export default function Home() {
             {error ? (
               <div className="status-box error">
                 <strong>Export problem</strong>
-                <p>{error}</p>
+                <p style={{ whiteSpace: "pre-line" }}>{error}</p>
               </div>
             ) : null}
           </div>

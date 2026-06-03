@@ -14,3 +14,4 @@ outputs/
 *.egg-info/
 .vercel
 job_info
+docs/

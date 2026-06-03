@@ -129,6 +129,42 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
 
+### Batch a folder of PDFs → one Excel file (the simple path)
+
+If you just want to run a stack of PDFs and get a spreadsheet, use `batch`. Drop
+your PDFs in a folder and point the command at it:
+
+```bash
+mkdir -p pdf_input          # drop your PDFs in here
+cp /path/to/*.pdf pdf_input/
+
+python -m earnings_extractor batch pdf_input --out outputs/extractions.xlsx
+```
+
+That's it — one command in, one `.xlsx` out. `pdf_input` and
+`outputs/extractions.xlsx` are the defaults, so `python -m earnings_extractor
+batch` alone works too.
+
+Key properties for batch runs:
+
+- **One bad PDF never fails the batch.** Corrupt, encrypted, scanned-image, or
+  non-earnings files are recorded and skipped; every other PDF still processes.
+- **A company missing some metrics never blocks the export.** Missing fields are
+  left blank instead of aborting the workbook (no more "Export blocked").
+- **You can always see the results.** Every extracted value is written to the
+  client sheet immediately. Because nothing has been human-reviewed yet, the
+  workbook is clearly stamped `DRAFT/UNREVIEWED` (amber tab).
+- **Nothing is silent.** The first sheet, **Batch Status**, lists every input
+  file and what happened to it (extracted / skipped / failed, with the error and
+  a needs-review count), so a missing company is visible at a glance.
+
+Live mode needs `OPENAI_API_KEY` (see [Live Mode](#live-mode)). To try the batch
+path offline against the two bundled samples, add `--mode recorded`.
+
+> For careful, auditable single-document work — approve/reject each citation
+> before anything reaches the client sheet — use the review-first workflow below
+> or the web app. `batch` is the fast lane; the steps below are the rigorous one.
+
 ### CLI quickstart (no API key required)
 
 This is the reviewer path. Recorded mode replays committed model responses, so it

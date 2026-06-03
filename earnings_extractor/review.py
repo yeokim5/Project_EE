@@ -267,6 +267,8 @@ def _resolve_source_file(
     draft: DraftRun,
     type_counts: Counter[str],
 ) -> str | None:
+    if metric.source_file:
+        return metric.source_file
     if len(draft.documents) == 1:
         return draft.documents[0].source_file
     if type_counts[metric.document_type] == 1:

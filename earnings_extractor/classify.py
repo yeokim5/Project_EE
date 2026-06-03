@@ -54,6 +54,28 @@ TRANSCRIPT_DOC_MARKERS = ("earnings call", "conference call")
 # source documents. Skip them before applying source-document heuristics.
 NON_SOURCE_MARKERS = ("problem statement for candidate", "take home assignment")
 
+# Generic signals that an investor-relations PDF is an earnings release/results
+# document even if it does not use formal "consolidated statements" headings.
+EARNINGS_RESULTS_RE = re.compile(
+    r"\b(?:q[1-4]|first|second|third|fourth)\s+"
+    r"(?:quarter\s+)?\d{4}\s+results\b",
+    re.IGNORECASE,
+)
+EARNINGS_RELEASE_MARKERS = (
+    "earnings release",
+    "earnings results",
+    "reported financial results",
+    "reports financial results",
+)
+EARNINGS_METRIC_MARKERS = (
+    "earnings per share",
+    "diluted eps",
+    "net income",
+    "total revenues",
+    "total revenue",
+    "revenue up",
+)
+
 # Generic, template-aligned terms used to rank which pages carry the metrics we
 # need to extract. All are standard financial vocabulary.
 SELECT_MARKERS = (
@@ -144,8 +166,14 @@ def classify_document(pages: list[PageText]) -> DocumentClassification:
         marker in head_text for marker in TRANSCRIPT_DOC_MARKERS
     )
     has_transcript_structure = total_speaker_turns >= 4 and "operator:" in head_text
+    has_transcript_section_marker = "operator:" in head_text or any(
+        marker in head_text
+        for marker in ("prepared remarks", "question-and-answer", "question and answer")
+    )
     is_transcript = has_transcript_structure or (
-        has_transcript_phrase and total_speaker_turns >= 2
+        has_transcript_phrase
+        and has_transcript_section_marker
+        and total_speaker_turns >= 2
     )
     # Earnings reports and shareholder letters routinely place their financial
     # statements after several pages of narrative, so scan the whole document
@@ -153,10 +181,14 @@ def classify_document(pages: list[PageText]) -> DocumentClassification:
     # transcript check, so a transcript that also contains statement tables
     # still classifies as a transcript.
     has_statement = any(marker in full_text for marker in TABLE_MARKERS)
+    has_earnings_results_marker = EARNINGS_RESULTS_RE.search(head_text) is not None or (
+        any(marker in head_text for marker in EARNINGS_RELEASE_MARKERS)
+        and any(marker in head_text for marker in EARNINGS_METRIC_MARKERS)
+    )
 
     if is_transcript:
         document_type: DocumentType = "earnings_call_transcript"
-    elif has_statement:
+    elif has_statement or has_earnings_results_marker:
         document_type = "earnings_report"
     else:
         document_type = "unknown"
