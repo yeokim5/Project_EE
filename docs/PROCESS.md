@@ -895,6 +895,10 @@ Run the relevant part of `docs/VERIFY.md` after each meaningful change.
 
 > Format: `YYYY-MM-DD-HH-MM — decision / client answer / assumption changed`
 
+- 2026-06-03-02-07 — Added a simpler README-first live batch run guide for
+  fresh users: install, configure `.env`, place PDFs in `pdf_input_copy`, run
+  the requested batch command, find `outputs/pdf_input_batch/extractions.xlsx`,
+  and check details in the workbook's `Extraction Draft` tab.
 - 2026-06-03-02-58 — Fixed two live-batch reliability misses with deterministic
   evidence checks instead of LLM arbitration. Currency normalization now uses
   explicit source-quote amounts to avoid double-scaling values the model already
@@ -905,6 +909,13 @@ Run the relevant part of `docs/VERIFY.md` after each meaningful change.
   billion` returned, `$1.6 billion` repurchases, and `$5.73` per-share dividend.
   Added regression tests and verified with focused tests, full `pytest`, `ruff`,
   recorded Tesla/Citi evals, and the recorded review/export gate.
+- 2026-06-03-03-21 — Made CLI batch output visibly review-first without
+  crowding the terminal. The workbook now opens on `Review Instructions`, then
+  `Extraction Draft`, `Review Queue`, and `Batch Status`; the queue includes
+  status/reason/source page/source quote for every template field. The CLI
+  prints only run progress, processed/skipped/failed counts, workbook path, and
+  a pointer to the review tabs. Verified with full `pytest`, full `ruff`, and a
+  recorded batch run to `outputs/batch_review_check/extractions.xlsx`.
 - 2026-06-03-00-00 — Added live progress output to the `batch` CLI.
   `run_batch` now accepts an optional progress callback, and `process_single_pdf`
   reports compact per-file stages: started, reading PDF, classifying, extracting,

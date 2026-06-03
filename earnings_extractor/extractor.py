@@ -124,7 +124,23 @@ Also extract auxiliary validation metrics when directly supported by source text
 - Free cash flow
 
 Internal schema notes:
-- currency values should keep the source unit/scale in unit and scale;
+- PERIOD: extract the CURRENT QUARTER's figure for every metric. Earnings
+  statements print the quarter beside full-year, year-to-date, nine-month, or
+  prior-year columns -- never take an annual / YTD / prior-period value for a
+  quarterly metric. A quarterly revenue near a full-year revenue 3-4x larger
+  means you are reading the wrong column. ``fiscal_period`` and ``value`` must
+  both be the single most recent quarter;
+- currency values: COPY the figure exactly as printed, keeping any thousands
+  separators, into ``value`` as a string -- e.g. a statement line "Revenues $
+  12,050,762" must be value "12,050,762". Do NOT convert, divide, round, or move
+  the decimal point, and never reinterpret a thousands separator as a decimal
+  point. Deterministic code does the math;
+- ``scale`` records the figure's printed magnitude so code can normalize it:
+  "thousands" when the statement says "in thousands" / "amounts in thousands",
+  "millions" when it says "in millions", "billions" when the figure itself is
+  written like "$21.6 billion". When unsure, copy the exact words near the
+  figure rather than guessing;
+- ``unit`` is the currency code (USD);
 - percentages should be percentage points;
 - Company Name should use a real on-page source quote that contains the company
   name. If the provided page text does not contain the company name, leave the

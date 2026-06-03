@@ -5,7 +5,7 @@ import pytest
 
 from earnings_extractor.identity import resolve_company_identity
 from earnings_extractor.ingest import PageText, read_pdf_metadata, read_pdf_pages
-from earnings_extractor.normalize import normalize_metric
+from earnings_extractor.normalize import normalize_metric, normalize_metrics
 from earnings_extractor.pipeline import extract, inspect_draft
 from earnings_extractor.schema import TEMPLATE_FIELDS, MetricRow
 from earnings_extractor.validation import (
@@ -13,6 +13,7 @@ from earnings_extractor.validation import (
     check_free_cash_flow,
     complete_template_rows,
     enrich_capital_return_text,
+    repair_table_scale,
     validate_metrics,
 )
 
@@ -112,6 +113,33 @@ def test_filename_identity_uses_multi_token_name_and_source_casing() -> None:
     assert identity.name == "American Express"
     assert identity.source_quote == "AMERICAN EXPRESS"
     assert identity.needs_review is False
+
+
+def test_us_bancorp_identity_resolves_canonical_name_not_pronoun() -> None:
+    # Regression: "us_bancorp_q1_2025.pdf" used to resolve to a stray lowercase
+    # "us" pronoun on the page. It must become the canonical "U.S. Bancorp".
+    pages = [
+        PageText(
+            source_file="pdf_input/us_bancorp_q1_2025.pdf",
+            page_number=1,
+            text=(
+                "U.S. Bancorp reports first quarter 2025 results. "
+                "Join us for the earnings call."
+            ),
+            char_count=80,
+        )
+    ]
+
+    identity = resolve_company_identity(
+        pages=pages,
+        metadata={},
+        source_file="pdf_input/us_bancorp_q1_2025.pdf",
+        document_type="earnings_report",
+    )
+
+    assert identity is not None
+    assert identity.name == "U.S. Bancorp"
+    assert identity.name != "us"
 
 
 def test_filename_identity_preserves_mixed_case_branding() -> None:
@@ -359,6 +387,96 @@ def test_magnitude_check_flags_net_income_above_revenue() -> None:
     assert magnitude.status == "failed"
     assert net_income.needs_review is True
     assert "exceeds total revenue" in (net_income.review_reason or "")
+
+
+def test_value_grounding_flags_decimal_misparse_of_table_number() -> None:
+    # Morgan Stanley regression: the extractor read the table number "17,739"
+    # (in millions) as the decimal "17.739", 1000x too small. Significant digits
+    # match, but with no unit word the scale gap is a misparse -- must not pass.
+    revenue = _metric("Total revenue", 17.739, unit="USD", scale="millions")
+    revenue.source_quote = "Net revenues 17,739 16,223 15,136"
+
+    validate_metrics([revenue])
+
+    assert revenue.needs_review is True
+    assert "verify scale" in (revenue.review_reason or "")
+
+
+def _thousands_page() -> PageText:
+    return PageText(
+        source_file="pdf_input/netflix_q4_2025.pdf",
+        page_number=12,
+        text=(
+            "CONSOLIDATED STATEMENTS OF OPERATIONS (in thousands, except per "
+            "share data)\nRevenues $ 12,050,762\nNet income $ 2,418,521"
+        ),
+        char_count=110,
+    )
+
+
+def test_repair_table_scale_fixes_decimal_misparse() -> None:
+    # Netflix regression: "12,050,762" (thousands table) misread as "12.050762".
+    metric = _metric("Total revenue", 12.050762, unit="USD", scale="millions")
+    metric.source_page = 12
+    metric.source_quote = "Revenues $ 12,050,762"
+
+    repair_table_scale([metric], [_thousands_page()])
+    normalize_metrics([metric])
+
+    assert abs(float(metric.value) - 12050.762) < 0.01
+    assert metric.needs_review is True
+    assert "table scale" in (metric.review_reason or "")
+
+
+def test_repair_table_scale_leaves_correct_value_untouched() -> None:
+    metric = _metric("Total revenue", 12050.762, unit="USD", scale="millions")
+    metric.source_page = 12
+    metric.source_quote = "Revenues $ 12,050,762"
+
+    repair_table_scale([metric], [_thousands_page()])
+
+    assert abs(float(metric.value) - 12050.762) < 0.01
+    assert metric.needs_review is False
+
+
+def test_grounding_accepts_thousands_table_value_without_false_flag() -> None:
+    metric = _metric("Total revenue", 12050.762, unit="USD", scale="millions")
+    metric.source_page = 12
+    metric.source_quote = "Revenues $ 12,050,762"
+
+    validate_metrics([metric], [_thousands_page()])
+
+    assert "scale" not in (metric.review_reason or "")
+    assert "not found" not in (metric.review_reason or "").lower()
+
+
+def test_bare_number_buybacks_flagged_for_review() -> None:
+    # Citigroup regression: the narrative buybacks field held a raw 2100.0.
+    # It must be routed to review, not treated as a finished cell.
+    bare = _metric("Buybacks and dividends", 2100.0, unit=None, scale=None)
+    bare.source_quote = "returned $2.1 billion to shareholders"
+    narrative = _metric(
+        "Buybacks and dividends", "$2.1B returned, including $1.6B buybacks"
+    )
+    narrative.source_quote = "$2.1B returned, including $1.6B buybacks"
+
+    validate_metrics([bare, narrative])
+
+    assert bare.needs_review is True
+    assert "bare number" in (bare.review_reason or "")
+    assert "bare number" not in (narrative.review_reason or "")
+
+
+def test_value_grounding_allows_billions_quote_with_unit_word() -> None:
+    # Counterpart: a genuine cross-scale match (21600 millions <-> "$21.6
+    # billion") is justified by the unit word and must stay clean.
+    revenue = _metric("Total revenue", 21600, unit="USD", scale="millions")
+    revenue.source_quote = "on $21.6 billion of revenues"
+
+    validate_metrics([revenue])
+
+    assert "verify scale" not in (revenue.review_reason or "")
+    assert "Reported value not found" not in (revenue.review_reason or "")
 
 
 def test_magnitude_check_skips_without_numeric_revenue() -> None:

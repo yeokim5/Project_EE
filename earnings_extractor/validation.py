@@ -15,10 +15,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from earnings_extractor.capital_return import is_bare_number
 from earnings_extractor.ingest import PageText
 from earnings_extractor.schema import TEMPLATE_FIELDS, DocumentType, MetricRow
 
 PLACEHOLDER_SOURCE_QUOTE = "No supporting source quote found in selected source pages"
+CAPITAL_RETURN_FIELD = "Buybacks and dividends"
 LOW_CONFIDENCE_THRESHOLD = 0.75
 CURRENCY_CHECK_TOLERANCE_USD_MILLIONS = 5.0
 
@@ -30,6 +32,98 @@ GROSS_MARGIN_RANGE = (-100.0, 100.0)
 
 # Matches a number token like "22,496", "21.6", "1.96", or "923".
 _NUMBER_TOKEN_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+# A unit word near a number justifies a power-of-ten gap between the normalized
+# value and the quote token (value 21600 USD millions <-> "$21.6 billion"). A
+# bare table number like "17,739" carries no such word, so a power-of-ten gap
+# there is a misparse, not a legitimate rescale.
+_SCALE_WORD_RE = re.compile(
+    r"\b(?:trillion|billion|million|thousand)s?\b|\b[bmk]n\b",
+    flags=re.IGNORECASE,
+)
+
+# Financial statements declare a table-wide scale ("amounts in thousands"). That
+# header -- not a word beside the figure -- is what makes a bare "12,050,762"
+# legitimately equal $12,050.762 million. Detected on the *cited* page only,
+# since a single filing mixes scales (summary in millions, statements in
+# thousands).
+_TABLE_SCALE_PATTERNS = (
+    ("thousand", re.compile(r"in thousands|thousands,\s*except|\$ in thousands", re.I)),
+    ("million", re.compile(r"in millions|millions,\s*except|\$ in millions", re.I)),
+)
+
+# Integers written with thousands separators -- "12,050,762", "17,739".
+_COMMA_INTEGER_RE = re.compile(r"\d{1,3}(?:,\d{3})+")
+
+# Currency metrics eligible for table-scale repair (narrative/percent excluded).
+_SCALE_REPAIR_FIELDS = (
+    "Total revenue",
+    "Net income",
+    "Operating income",
+    "Operating expenses",
+    "Operating cash flow",
+    "Capital expenditures",
+    "Free cash flow",
+)
+
+
+def detect_table_scale(page_text: str | None) -> str | None:
+    """Return ``"thousand"``/``"million"`` if the page declares a table scale."""
+
+    if not page_text:
+        return None
+    for scale, pattern in _TABLE_SCALE_PATTERNS:
+        if pattern.search(page_text):
+            return scale
+    return None
+
+
+def repair_table_scale(metrics: list[MetricRow], pages: list[PageText] | None) -> None:
+    """Repair decimal/comma misparses using the cited page's table scale.
+
+    The language model occasionally reads a statement integer like "12,050,762"
+    (in a thousands table) as the decimal "12.050762" -- 1,000,000x too small.
+    When the value's significant digits match an integer in its own quote but the
+    magnitude is a power of ten off, and the cited page declares a table scale,
+    rewrite the value to that integer at the table's native scale. Normalization
+    then yields the correct USD-millions figure. The row is flagged so a human
+    still confirms the repair; an already-correct value is left untouched.
+    """
+
+    if not pages:
+        return
+    page_text_by_number = {page.page_number: page.text for page in pages}
+    for metric in metrics:
+        if metric.metric_name not in _SCALE_REPAIR_FIELDS:
+            continue
+        if isinstance(metric.value, bool) or not isinstance(metric.value, int | float):
+            continue
+        value = abs(float(metric.value))
+        if value == 0 or not metric.source_quote:
+            continue
+        value_sig = _significant_digits(f"{value:.6f}")
+        if not value_sig:
+            continue
+        scale = detect_table_scale(page_text_by_number.get(metric.source_page))
+        if scale is None:
+            continue
+        for token in _COMMA_INTEGER_RE.findall(metric.source_quote):
+            integer = float(token.replace(",", ""))
+            if _significant_digits(str(int(integer))) != value_sig:
+                continue
+            expected_millions = integer / 1000.0 if scale == "thousand" else integer
+            if _close(value, expected_millions):
+                break  # already at the right scale -- nothing to repair
+            sign = -1.0 if float(metric.value) < 0 else 1.0
+            metric.value = sign * integer
+            metric.scale = "thousands" if scale == "thousand" else "millions"
+            metric.unit = "USD"
+            _flag(
+                metric,
+                "Repaired a decimal/comma misparse using the page's table scale; "
+                "verify the value against the source.",
+            )
+            break
 
 
 @dataclass(frozen=True)
@@ -155,11 +249,32 @@ def validate_metrics(
             isinstance(metric.value, int | float)
             and metric.source_quote
             and metric.source_quote != PLACEHOLDER_SOURCE_QUOTE
-            and not _value_appears_in_quote(metric.value, metric.source_quote)
         ):
-            _flag(metric, "Reported value not found in its source quote.")
+            status = _grounding_status(
+                metric.value,
+                metric.source_quote,
+                detect_table_scale(page_text_by_number.get(metric.source_page)),
+            )
+            if status == "scale_mismatch":
+                _flag(
+                    metric,
+                    "Reported value matches its source quote's digits but is a "
+                    "power of ten away with no unit word to justify it; verify "
+                    "scale (possible comma/decimal misparse).",
+                )
+            elif status == "not_found":
+                _flag(metric, "Reported value not found in its source quote.")
         if metric.value in (None, "") and metric.metric_name in TEMPLATE_FIELDS:
             _flag(metric, "Template field is blank and requires review.")
+        if metric.metric_name == CAPITAL_RETURN_FIELD and is_bare_number(
+            metric.value
+        ):
+            _flag(
+                metric,
+                "Buybacks and dividends is a narrative field but holds a bare "
+                "number; needs a verified buyback/dividend description before it "
+                "can reach the client sheet.",
+            )
 
     results.append(check_free_cash_flow(metrics))
     results.append(check_value_magnitudes(metrics))
@@ -282,6 +397,8 @@ def _numeric_value(metric: MetricRow | None) -> float | None:
     return float(metric.value)
 
 
+
+
 def _capital_return_summary(text: str) -> tuple[str, str] | None:
     page_text = _normalize_ws(text)
     capital_patterns = (
@@ -350,20 +467,68 @@ def _quarterly_dividend_per_share(text: str) -> tuple[str, str] | None:
     return None
 
 
-def _value_appears_in_quote(value: float, quote: str) -> bool:
-    """True if the reported number is grounded in its own source quote.
+def _close(left: float, right: float) -> bool:
+    return abs(left - right) <= max(1.0, abs(right) * 0.001)
 
-    Compares scale-invariant significant digits, so a normalized 21600 (USD
-    millions) still matches a "$21.6 billion" quote and 22496 matches "22,496".
+
+def _grounding_status(
+    value: float, quote: str, table_scale: str | None = None
+) -> str:
+    """Classify how a reported number relates to the numbers in its quote.
+
+    Significant-digit matching alone is scale-blind: a misparsed ``17.739``
+    (comma read as a decimal point) shares digits with the quote token
+    ``17,739`` even though it is 1000x too small. To tell a legitimate
+    cross-scale match from a decimal/comma error, this compares magnitudes too.
+
+    Returns one of:
+
+    ``"grounded"``
+        A quote token matches the value's significant digits at the same scale
+        (ratio ~1), or a power of ten apart **with a unit word present** -- e.g.
+        a normalized ``21600`` (USD millions) grounded in ``"$21.6 billion"``.
+    ``"scale_mismatch"``
+        A quote token shares the value's significant digits but sits a power of
+        ten away with no unit word to justify it -- the Morgan Stanley
+        ``17.739`` vs ``"17,739"`` failure. Routed to review, never passed.
+    ``"not_found"``
+        No quote token shares the value's significant digits.
     """
 
-    target = _significant_digits(f"{abs(float(value)):.4f}")
-    if not target:
-        return True
-    return any(
-        _significant_digits(token.replace(",", "")) == target
-        for token in _NUMBER_TOKEN_RE.findall(quote)
-    )
+    target_value = abs(float(value))
+    target_sig = _significant_digits(f"{target_value:.6f}")
+    if not target_sig:
+        return "grounded"
+
+    has_scale_word = bool(_SCALE_WORD_RE.search(quote))
+    digit_match_found = False
+    for token in _NUMBER_TOKEN_RE.findall(quote):
+        cleaned = token.replace(",", "")
+        if _significant_digits(cleaned) != target_sig:
+            continue
+        digit_match_found = True
+        try:
+            token_value = abs(float(cleaned))
+        except ValueError:
+            continue
+        if token_value == 0 or target_value == 0:
+            return "grounded"
+        ratio = max(token_value, target_value) / min(token_value, target_value)
+        if ratio < 1.5:
+            return "grounded"  # same scale -- an exact match
+        if has_scale_word:
+            return "grounded"  # a power of ten apart, justified by units
+        # A table-wide scale header justifies the gap, but only at the exact
+        # implied scale: a USD-millions value must equal the quote integer / 1000
+        # (thousands table) or the integer itself (millions table).
+        if table_scale == "thousand" and _close(target_value, token_value / 1000.0):
+            return "grounded"
+        if table_scale == "million" and _close(target_value, token_value):
+            return "grounded"
+
+    if digit_match_found:
+        return "scale_mismatch"
+    return "not_found"
 
 
 def _significant_digits(text: str) -> str:

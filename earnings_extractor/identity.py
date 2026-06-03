@@ -30,6 +30,20 @@ GENERIC_COMPANY_SUFFIXES = (
     "plc",
 )
 
+# Filename/metadata tokens flatten punctuation, so "U.S. Bancorp" arrives as
+# "us bancorp" and a bare "us" can spuriously match the pronoun on a page.
+# This maps the flattened form back to the canonical display name. Extend as new
+# punctuation-sensitive issuers appear.
+KNOWN_COMPANY_NAMES = {
+    "us bancorp": "U.S. Bancorp",
+    "u s bancorp": "U.S. Bancorp",
+    "us bancorp.": "U.S. Bancorp",
+}
+
+# A lone token this short or shorter is never a company name on its own; it is a
+# pronoun/abbreviation ("us", "we") that must not become an identity.
+MIN_STANDALONE_NAME_LEN = 3
+
 
 def resolve_company_identity(
     pages: list[PageText],
@@ -49,6 +63,11 @@ def resolve_company_identity(
 
     candidates = _metadata_candidates(metadata)
     candidates.extend(_filename_candidates(source_file))
+    candidates = _dedupe(
+        _canonicalize_known_name(candidate)
+        for candidate in candidates
+        if _is_plausible_name(candidate)
+    )
 
     for candidate in candidates:
         evidence = _find_on_page_evidence(candidate, pages)
@@ -226,6 +245,28 @@ def _fallback_transcript_identity(pages: list[PageText]) -> IdentityCandidate | 
                 review_reason=None,
             )
     return None
+
+
+def _canonicalize_known_name(value: str) -> str:
+    """Map a flattened candidate back to its canonical display name, if known."""
+
+    key = re.sub(r"\s+", " ", value).strip().lower()
+    return KNOWN_COMPANY_NAMES.get(key, value)
+
+
+def _is_plausible_name(value: str) -> bool:
+    """Reject candidates too short or generic to stand alone as a company name."""
+
+    cleaned = value.strip()
+    if not cleaned:
+        return False
+    # Known multi-word names (e.g. "us bancorp") are always allowed through.
+    if re.sub(r"\s+", " ", cleaned).lower() in KNOWN_COMPANY_NAMES:
+        return True
+    # A single short token like "Us"/"We" is a pronoun, not an issuer name.
+    if " " not in cleaned and len(cleaned) < MIN_STANDALONE_NAME_LEN:
+        return False
+    return True
 
 
 def _clean_company_name(value: str) -> str:

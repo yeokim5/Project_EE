@@ -4,8 +4,12 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 
+from earnings_extractor.capital_return import (
+    narrative_from_quote as _capital_return_from_quote,
+)
 from earnings_extractor.cli import main
 from earnings_extractor.export import (
+    _compact_quarter,
     export_reviewed_run,
     format_currency_batch_text,
     format_currency_billions,
@@ -45,6 +49,10 @@ def test_client_cell_mappers() -> None:
     eps.value = 4.28
     eps.source_quote = "Diluted EPS $4.28"
     assert map_metric_to_client_cell(eps, display_mode="batch") == "$4.28 diluted"
+    # Trailing zero kept: $2.6 must render as $2.60, not $2.6.
+    eps.value = 2.6
+    eps.source_quote = "Diluted EPS $2.60"
+    assert map_metric_to_client_cell(eps, display_mode="batch") == "$2.60 diluted"
 
     capital_return = _item(
         _metric(
@@ -64,6 +72,68 @@ def test_client_cell_mappers() -> None:
             "repurchases; $5.73 per share cash dividend"
         )
     )
+
+
+def test_mapper_never_emits_bare_number_for_buybacks() -> None:
+    # Regression: a raw float like 2100.0 must never reach the cell as "2100.0".
+    # With no usable quote there is nothing to render, so it stays "Not disclosed".
+    for raw in (2100.0, 17600.0, "3536.396", "$4000"):
+        item = _item(
+            _metric("Buybacks and dividends", raw, unit=None, scale=None)
+        )
+        cell = map_metric_to_client_cell(item, display_mode="batch")
+        assert cell == "Not disclosed in this release"
+        assert str(cell) != str(raw)
+
+
+def test_mapper_derives_buybacks_narrative_from_quote() -> None:
+    # The bare value 4000.0 is junk, but the quote names the real buyback -- it
+    # must surface that, not drop a genuinely-disclosed repurchase.
+    item = _item(_metric("Buybacks and dividends", 4000.0, unit=None, scale=None))
+    item.source_quote = (
+        "Repurchased 46.3 million shares, or $4.0 billion, of common stock "
+        "in first quarter 2026"
+    )
+    assert (
+        map_metric_to_client_cell(item, display_mode="batch")
+        == "$4.0 billion of common stock repurchased"
+    )
+
+
+def test_capital_return_from_quote_covers_disclosure_shapes() -> None:
+    cases = {
+        "Citigroup returned a total of $2.1 billion to common shareholders": (
+            "$2.1 billion returned to shareholders"
+        ),
+        "RETURNED ~$17.6 BILLION IN COMMON SHARE REPURCHASES AND DIVIDENDS": (
+            "$17.6 billion returned to shareholders"
+        ),
+        "The Firm repurchased $1.0 billion of its outstanding common stock": (
+            "$1.0 billion of common stock repurchased"
+        ),
+        "Repurchases of common stock (3,536,396)": (
+            "$3.5 billion of share repurchases"
+        ),
+    }
+    for quote, expected in cases.items():
+        assert _capital_return_from_quote(quote) == expected
+    # No buyback/return amount in the quote -> nothing to render.
+    assert _capital_return_from_quote("does not mention buybacks or dividends") is None
+    assert _capital_return_from_quote("executing its share repurchase program") is None
+
+
+def test_compact_quarter_normalizes_ledger_forms() -> None:
+    # U.S. Bancorp regression: "1Q25" reached the client sheet verbatim.
+    assert _compact_quarter("1Q25") == "Q1 2025"
+    assert _compact_quarter("1Q2025") == "Q1 2025"
+    assert _compact_quarter("First Quarter 2025") == "Q1 2025"
+    assert _compact_quarter("First-quarter 2025") == "Q1 2025"
+    assert _compact_quarter("Q1 2025") == "Q1 2025"
+    assert _compact_quarter("4Q24") == "Q4 2024"
+    assert _compact_quarter("Quarter ended Mar 31, 2026") == "Q1 2026"
+    assert _compact_quarter("Three Months Ended December 31, 2025") == "Q4 2025"
+    assert _compact_quarter("Q1-2026") == "Q1 2026"
+    assert _compact_quarter("Q4-2025") == "Q4 2025"
 
 
 def test_mapper_rejects_unexpected_currency_units() -> None:

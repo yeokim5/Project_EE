@@ -1,3 +1,78 @@
+# Simple Live Batch Run
+
+Use this path when you have a folder of earnings PDFs and want one Excel file.
+Run these commands from the project root.
+
+## 1. Create and activate Python
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+## 2. Install the project
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+## 3. Prepare live mode
+
+Live mode calls OpenAI, so it needs an API key. Copy the example environment
+file, then edit `.env` and fill in `OPENAI_API_KEY`.
+
+```bash
+cp .env.example .env
+```
+
+Your `.env` should look like this:
+
+```bash
+OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-5.4-mini
+OPENAI_REASONING_EFFORT=low
+```
+
+Do not commit `.env`.
+
+## 4. Put PDFs in the input folder
+
+Create the folder used by the batch command and put all PDFs there.
+
+```bash
+mkdir -p pdf_input_copy
+```
+
+Example:
+
+```bash
+cp /path/to/your/pdfs/*.pdf pdf_input_copy/
+```
+
+If your folder is named `pdf_input` instead, either rename it to
+`pdf_input_copy` or change the command below to use `pdf_input`.
+
+## 5. Run the batch
+
+```bash
+python -m earnings_extractor batch pdf_input_copy --out outputs/pdf_input_batch/extractions.xlsx --mode live
+```
+
+## 6. Check the output
+
+The expected Excel workbook is:
+
+```text
+outputs/pdf_input_batch/extractions.xlsx
+```
+
+Open `extractions.xlsx` and go to the **Extraction Draft** tab to check the
+extracted details. The workbook is a draft batch export, so it also includes
+review tabs that show each extracted field, source page, quote, confidence, and
+any reason a field needs human review.
+
+---
+
 # Earnings Extractor
 
 Review-first extraction of standard financial metrics from earnings PDFs and
@@ -154,9 +229,12 @@ Key properties for batch runs:
 - **You can always see the results.** Every extracted value is written to the
   client sheet immediately. Because nothing has been human-reviewed yet, the
   workbook is clearly stamped `DRAFT/UNREVIEWED` (amber tab).
-- **Nothing is silent.** The first sheet, **Batch Status**, lists every input
-  file and what happened to it (extracted / skipped / failed, with the error and
-  a needs-review count), so a missing company is visible at a glance.
+- **Nothing is silent.** The workbook opens on **Review Instructions**, then
+  **Extraction Draft** shows the client-template draft. The review instructions
+  explain the colors, and **Review Queue** lists every field as `OK`,
+  `NEEDS REVIEW`, or `NOT DISCLOSED` with the reason, source page, and quote.
+  Colored cells on the draft sheet match that legend, and flagged/blank cells
+  carry comments.
 
 Live mode needs `OPENAI_API_KEY` (see [Live Mode](#live-mode)). To try the batch
 path offline against the two bundled samples, add `--mode recorded`.

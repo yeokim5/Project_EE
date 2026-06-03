@@ -29,6 +29,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from earnings_extractor.capital_return import (
+    CAPITAL_RETURN_FIELD,
+    resolve_capital_return_narrative,
+)
 from earnings_extractor.classify import classify_document, select_extraction_pages
 from earnings_extractor.config import OpenAIConfig, load_openai_config
 from earnings_extractor.extractor import extract_metrics_live_with_usage
@@ -40,6 +44,7 @@ from earnings_extractor.schema import (
     DocumentType,
     DraftRun,
     LLMUsage,
+    MetricRow,
     MetricsBatch,
     SourceDocument,
     new_run_id,
@@ -50,8 +55,10 @@ from earnings_extractor.validation import (
     complete_template_rows,
     enrich_capital_return_text,
     repair_source_pages,
+    repair_table_scale,
     validate_metrics,
 )
+from earnings_extractor.verifier import verify_template_metrics
 
 
 def find_pdf_inputs(input_path: Path) -> list[Path]:
@@ -141,7 +148,9 @@ def process_single_pdf(
     )
     apply_company_identity(metrics, identity)
     enrich_capital_return_text(metrics, pages)
+    _apply_capital_return_narrative(metrics, pages, config, mode)
     _emit(progress, "normalizing...")
+    repair_table_scale(metrics, pages)
     normalize_metrics(metrics)
     # Live extractions can mis-cite a page; snap each quote to the page that
     # actually contains it before the citation validator runs. Recorded
@@ -152,6 +161,14 @@ def process_single_pdf(
         repair_source_pages(metrics, pages)
     _emit(progress, "validating...")
     validate_metrics(metrics, pages)
+    # Language-model safety net: on live runs, have the model re-check each
+    # populated client value against its quote and flag semantic errors the
+    # deterministic rules cannot enumerate (wrong line item, full-year vs the
+    # quarter). It only adds review flags -- it never edits a value -- and is
+    # live-only so recorded output stays reproducible.
+    if mode == "live":
+        _emit(progress, "verifying values...")
+        verify_template_metrics(metrics, config, mode)
 
     return ProcessedDocument(
         source_file=str(pdf_path),
@@ -165,6 +182,59 @@ def process_single_pdf(
         usage=usage,
         metrics=metrics,
     )
+
+
+def _apply_capital_return_narrative(
+    metrics: list[MetricRow],
+    pages: list[PageText],
+    config: OpenAIConfig | None,
+    mode: str,
+) -> None:
+    """Fill the buybacks cell with a grounded narrative when the value is weak.
+
+    Runs after the deterministic ``enrich_capital_return_text``: only rows it
+    could not phrase (a bare number or ``None``) reach the language model, which
+    turns the cited page's prose into one sentence. The model is live-only and
+    its output is number-checked against the source; recorded runs and misses
+    fall back to the deterministic quote deriver. The row stays ``needs_review``
+    -- this changes the text, never the export approval gate.
+    """
+
+    row = next(
+        (m for m in metrics if m.metric_name == CAPITAL_RETURN_FIELD), None
+    )
+    if row is None:
+        return
+    context = next(
+        (p.text for p in pages if p.page_number == row.source_page),
+        "\n".join(p.text for p in pages),
+    )
+    narrative = resolve_capital_return_narrative(
+        value=row.value,
+        quote=row.source_quote or "",
+        context_text=context,
+        config=config,
+        mode=mode,
+    )
+    if narrative is None:
+        return
+    row.value = narrative
+    row.unit = None
+    row.scale = None
+    row.needs_review = True
+    row.review_reason = _append_capital_return_reason(row.review_reason)
+
+
+def _append_capital_return_reason(existing: str | None) -> str:
+    reason = (
+        "Buyback/dividend summary synthesized from the source text; verify the "
+        "amount and buyback/dividend split against the citation."
+    )
+    if not existing:
+        return reason
+    if reason in existing:
+        return existing
+    return f"{existing}; {reason}"
 
 
 def _emit(progress: Callable[[str], None] | None, message: str) -> None:

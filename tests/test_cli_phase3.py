@@ -2,11 +2,14 @@ import json
 import time
 from pathlib import Path
 
+from openpyxl import load_workbook
+
+from earnings_extractor.batch import run_batch
 from earnings_extractor.cli import main
 from earnings_extractor.config import OpenAIConfig
 from earnings_extractor.extractor import LiveExtractionResult
 from earnings_extractor.ingest import PageText
-from earnings_extractor.pipeline import find_pdf_inputs
+from earnings_extractor.pipeline import ProcessedDocument, find_pdf_inputs
 from earnings_extractor.schema import (
     DocumentClassification,
     DraftRun,
@@ -14,6 +17,7 @@ from earnings_extractor.schema import (
     MetricRow,
     MetricsBatch,
     PageClassification,
+    SourceDocument,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -323,6 +327,93 @@ def test_metrics_keep_exact_source_file_for_export_grouping(
     assert processed.metrics[0].source_file == str(pdf_path)
 
 
+def test_batch_cli_outputs_client_first_review_tabs_and_short_summary(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    input_dir = tmp_path / "pdfs"
+    input_dir.mkdir()
+    pdf_path = input_dir / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF")
+
+    def fake_process_single_pdf(pdf_path, mode, config, progress=None):
+        metrics = _batch_metrics(str(pdf_path))
+        return ProcessedDocument(
+            source_file=str(pdf_path),
+            document=SourceDocument(
+                source_file=str(pdf_path),
+                document_type="earnings_report",
+                page_count=1,
+            ),
+            classification=DocumentClassification(
+                source_file=str(pdf_path),
+                document_type="earnings_report",
+                page_count=1,
+                pages=[],
+            ),
+            selected_pages=[1],
+            usage=None,
+            metrics=metrics,
+        )
+
+    monkeypatch.setattr(
+        "earnings_extractor.batch.process_single_pdf",
+        fake_process_single_pdf,
+    )
+
+    out_xlsx = tmp_path / "out.xlsx"
+    summary = run_batch(input_dir, out_xlsx, mode="recorded")
+
+    assert "Review summary:" not in summary.as_text()
+    assert "Needs attention:" not in summary.as_text()
+    assert "Review details are in the workbook" in summary.as_text()
+
+    workbook = load_workbook(out_xlsx)
+    assert workbook.sheetnames[:4] == [
+        "Review Instructions",
+        "Extraction Draft",
+        "Review Queue",
+        "Batch Status",
+    ]
+    instructions = workbook["Review Instructions"]
+    assert instructions["A1"].value == "Workbook state"
+    assert (
+        instructions["B4"].value
+        == "OK: populated value passed deterministic checks."
+    )
+    queue = workbook["Review Queue"]
+    headers = [cell.value for cell in queue[1]]
+    assert headers == [
+        "Status",
+        "Source file",
+        "Company",
+        "Quarter",
+        "Field",
+        "Displayed value",
+        "Reason",
+        "Source page",
+        "Source quote",
+    ]
+    rows = list(queue.iter_rows(min_row=2, values_only=True))
+    assert any(row[0] == "OK" and row[4] == "Total revenue" for row in rows)
+    assert any(
+        row[0] == "NEEDS REVIEW" and row[4] == "Buybacks and dividends"
+        for row in rows
+    )
+    assert any(row[0] == "NOT DISCLOSED" and row[4] == "Gross margin" for row in rows)
+
+    assert "Start on Extraction Draft" in instructions["B2"].value
+
+    client = workbook["Extraction Draft"]
+    assert client["C2"].fill.fgColor.rgb == "00E2F0D9"
+    assert client["G2"].comment is not None
+    assert "NOT DISCLOSED" in client["G2"].comment.text
+    assert client["G2"].fill.fgColor.rgb == "00E7E6E6"
+    assert client["I2"].comment is not None
+    assert "NEEDS REVIEW" in client["I2"].comment.text
+    assert client["I2"].fill.fgColor.rgb == "00FFF2CC"
+
+
 def test_inspect_summarizes_draft_file(tmp_path: Path, capsys) -> None:
     draft_path = _write_sample_draft(tmp_path)
 
@@ -483,6 +574,51 @@ def _write_sample_draft(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return draft_path
+
+
+def _batch_metrics(source_file: str) -> list[MetricRow]:
+    base = {
+        "Company Name": ("ExampleCo", None, None, False, None),
+        "Quarter": ("Q1 2026", None, None, False, None),
+        "Total revenue": (1000, "USD", "millions", False, None),
+        "Earnings per share": (1.23, "USD/share", None, False, None),
+        "Net income": (100, "USD", "millions", False, None),
+        "Operating income": (120, "USD", "millions", False, None),
+        "Gross margin": (
+            None,
+            None,
+            None,
+            True,
+            "Gross margin was not disclosed.",
+        ),
+        "Operating expenses": (880, "USD", "millions", False, None),
+        "Buybacks and dividends": (
+            "$10 million share repurchases",
+            None,
+            None,
+            True,
+            "Combined capital return field needs review.",
+        ),
+    }
+    return [
+        MetricRow(
+            source_file=source_file,
+            company="ExampleCo",
+            document_type="earnings_report",
+            fiscal_period="Q1 2026",
+            metric_name=name,
+            metric_category="template",
+            value=value,
+            unit=unit,
+            scale=scale,
+            source_page=1,
+            source_quote=f"{name}: {value}",
+            confidence=0.99,
+            needs_review=needs_review,
+            review_reason=reason,
+        )
+        for name, (value, unit, scale, needs_review, reason) in base.items()
+    ]
 
 
 def _write_low_score_draft(tmp_path: Path) -> Path:

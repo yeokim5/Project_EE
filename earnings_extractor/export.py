@@ -28,6 +28,11 @@ from openpyxl import load_workbook
 from openpyxl.comments import Comment
 from pydantic import BaseModel, ConfigDict
 
+from earnings_extractor.capital_return import (
+    is_bare_number,
+    narrative_from_quote,
+    narrative_looks_mangled,
+)
 from earnings_extractor.review import (
     ReviewDecision,
     ReviewDecisionsFile,
@@ -46,6 +51,7 @@ CURRENCY_TEMPLATE_FIELDS = {
 }
 GROSS_MARGIN_FIELD = "Gross margin"
 EPS_FIELD = "Earnings per share"
+CAPITAL_RETURN_FIELD = "Buybacks and dividends"
 NON_POPULATING_STATUSES = {"rejected", "needs_fix", "not_applicable"}
 ExportDisplayMode = Literal["template", "batch"]
 
@@ -198,12 +204,18 @@ def map_metric_to_client_cell(
                 if re.search(r"\bdiluted\b", item.source_quote, flags=re.IGNORECASE)
                 else ""
             )
-            return f"${float(item.value):g}{suffix}"
+            return f"${float(item.value):.2f}{suffix}"
         return float(item.value)
     if display_mode == "batch" and item.metric_name == "Quarter":
         return _compact_quarter(str(item.value))
-    if display_mode == "batch" and item.metric_name == "Buybacks and dividends":
-        return _clean_capital_return_text(str(item.value))
+    if item.metric_name == CAPITAL_RETURN_FIELD:
+        # A bare number ("2100.0") is unconverted raw data, never a verifiable
+        # sentence -- but the source quote usually still names the real amount,
+        # so read the narrative from there rather than dropping the disclosure.
+        text = _capital_return_display_text(item, display_mode)
+        if text is None:
+            return _missing_client_value(CAPITAL_RETURN_FIELD, display_mode)
+        return text
     return str(item.value)
 
 
@@ -284,16 +296,49 @@ def _build_client_rows(
                     f"{source_file} has {len(candidates)} candidates for {field}; "
                     f"used metric_id {chosen.metric_id if chosen else 'none'}."
                 )
-            if chosen is None or not _should_populate_cell(
-                chosen,
-                decisions_by_metric_id.get(chosen.metric_id),
-                allow_unreviewed,
+            decision = (
+                decisions_by_metric_id.get(chosen.metric_id) if chosen else None
+            )
+            if field == CAPITAL_RETURN_FIELD:
+                # Narrative field: the quote, not the raw value, is the truth.
+                row[field] = _resolve_capital_return_cell(
+                    chosen, decision, allow_unreviewed, display_mode
+                )
+            elif chosen is None or not _should_populate_cell(
+                chosen, decision, allow_unreviewed
             ):
                 row[field] = _missing_client_value(field, display_mode)
             else:
                 row[field] = map_metric_to_client_cell(chosen, display_mode)
         rows.append(row)
     return rows, warnings
+
+
+def _resolve_capital_return_cell(
+    chosen: ReviewItem | None,
+    decision: ReviewDecision | None,
+    allow_unreviewed: bool,
+    display_mode: ExportDisplayMode,
+) -> Any:
+    """Buybacks cell: derive narrative from the quote, then apply the trust gate.
+
+    Keeps the same approval discipline as every other cell -- an unreviewed
+    figure only appears in a draft (``allow_unreviewed``) or once approved -- but
+    gates on the derived sentence instead of the raw value, which is routinely
+    ``None`` for this narrative field even when the quote names a real amount.
+    """
+
+    text = _capital_return_display_text(chosen, display_mode) if chosen else None
+    if text is None:
+        return _missing_client_value(CAPITAL_RETURN_FIELD, display_mode)
+    approved = (
+        decision.review_status == "approved"
+        if decision is not None
+        else allow_unreviewed
+    )
+    if not approved:
+        return _missing_client_value(CAPITAL_RETURN_FIELD, display_mode)
+    return text
 
 
 def _missing_client_value(field: str, display_mode: ExportDisplayMode) -> str:
@@ -305,20 +350,68 @@ def _missing_client_value(field: str, display_mode: ExportDisplayMode) -> str:
 
 
 def _compact_quarter(value: str) -> str:
+    value = value.strip()
+    # "First Quarter 2025" / "First-quarter 2025".
     match = re.fullmatch(
-        r"(First|Second|Third|Fourth)\s+Quarter\s+(\d{4})",
-        value.strip(),
+        r"(First|Second|Third|Fourth)[\s-]+Quarter\s+(\d{4})",
+        value,
         flags=re.IGNORECASE,
     )
-    if not match:
-        return value
-    quarter = {
-        "first": "Q1",
-        "second": "Q2",
-        "third": "Q3",
-        "fourth": "Q4",
-    }[match.group(1).lower()]
-    return f"{quarter} {match.group(2)}"
+    if match:
+        quarter = {
+            "first": "Q1",
+            "second": "Q2",
+            "third": "Q3",
+            "fourth": "Q4",
+        }[match.group(1).lower()]
+        return f"{quarter} {match.group(2)}"
+    # Compact ledger forms: "1Q25", "1Q2025", "Q1 25", "Q1-2026" -> "Q1 2025".
+    compact = re.fullmatch(
+        r"Q?([1-4])[\s-]*Q?[\s-]*(\d{2}|\d{4})",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if compact:
+        quarter, year = compact.group(1), compact.group(2)
+        if len(year) == 2:
+            year = f"20{year}"
+        return f"Q{quarter} {year}"
+    # Period-ending phrasing: "Quarter ended Mar 31, 2026",
+    # "Three Months Ended March 31, 2026" -> the quarter whose fiscal period
+    # closes in that month (only the four quarter-end months map cleanly).
+    period = re.search(
+        r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+(\d{4})",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if period:
+        quarter = {"mar": "Q1", "jun": "Q2", "sep": "Q3", "dec": "Q4"}.get(
+            period.group(1).lower()
+        )
+        if quarter:
+            return f"{quarter} {period.group(2)}"
+    return value
+
+
+def _capital_return_display_text(
+    item: ReviewItem, display_mode: ExportDisplayMode
+) -> str | None:
+    """The buybacks cell text: existing narrative, else derived from the quote.
+
+    By export time any live model narrative is already stored on ``item.value``;
+    this only has to clean an existing sentence or fall back to the deterministic
+    quote deriver (recorded runs and live model misses).
+    """
+
+    if (
+        isinstance(item.value, str)
+        and not is_bare_number(item.value)
+        and not narrative_looks_mangled(item.value)
+    ):
+        if display_mode == "batch":
+            return _clean_capital_return_text(item.value)
+        return str(item.value)
+    return narrative_from_quote(item.source_quote)
 
 
 def _clean_capital_return_text(value: str) -> str:
