@@ -13,6 +13,7 @@ __pycache__/
 outputs/
 pdf_input/
 pdf_input_copy/
+pdf_input_fresh/
 *.egg-info/
 .vercel
 job_info

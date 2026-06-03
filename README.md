@@ -33,7 +33,7 @@ OPENAI_MODEL=gpt-5.4-mini
 OPENAI_REASONING_EFFORT=low
 ```
 
-Do not commit `.env`.
+
 
 ## 4. Put PDFs in the input folder
 
