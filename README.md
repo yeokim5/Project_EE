@@ -37,20 +37,18 @@ OPENAI_REASONING_EFFORT=low
 
 ## 4. Put PDFs in the input folder
 
-Create the folder used by the batch command and put all PDFs there.
+Create the input folder:
 
 ```bash
 mkdir -p pdf_input_copy
 ```
 
-Example:
+Put all earnings PDFs in `pdf_input_copy`. You can drag them into the folder in
+Finder, or copy them from the terminal:
 
 ```bash
 cp /path/to/your/pdfs/*.pdf pdf_input_copy/
 ```
-
-If your folder is named `pdf_input` instead, either rename it to
-`pdf_input_copy` or change the command below to use `pdf_input`.
 
 ## 5. Run the batch
 
@@ -405,4 +403,3 @@ failure rate, and cost per document.
 - If a mixed Next.js + Python Vercel project does not route Python functions,
 deploy the Python API on Render/Railway/Fly and set `PYTHON_API_BASE_URL` in
 the Vercel frontend environment.
-
