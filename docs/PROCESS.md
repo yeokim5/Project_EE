@@ -895,6 +895,12 @@ Run the relevant part of `docs/VERIFY.md` after each meaningful change.
 
 > Format: `YYYY-MM-DD-HH-MM — decision / client answer / assumption changed`
 
+- 2026-06-03-02-53 — Updated README setup snippets to create the virtualenv
+  with `python3 -m venv .venv`, matching macOS shells where bare `python` is
+  not installed.
+- 2026-06-03-02-51 — Simplified the README live-batch input-folder step:
+  users can drag earnings PDFs into `pdf_input_copy` or copy them with `cp`,
+  without extra alternate-folder explanation.
 - 2026-06-03-02-07 — Added a simpler README-first live batch run guide for
   fresh users: install, configure `.env`, place PDFs in `pdf_input_copy`, run
   the requested batch command, find `outputs/pdf_input_batch/extractions.xlsx`,

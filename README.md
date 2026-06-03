@@ -6,7 +6,7 @@ Run these commands from the project root.
 ## 1. Create and activate Python
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
@@ -201,7 +201,7 @@ requires real human review decisions.
 Create a virtual environment and install the package:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
