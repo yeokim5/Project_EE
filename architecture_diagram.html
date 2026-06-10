@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Earnings Extractor — Architecture</title>
+<style>
+  :root{--bg:#f6f7f9;--ink:#1f2937;--muted:#6b7280;--hair:#e5e7eb;
+    --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);padding:26px 16px 70px}
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-size:24px;letter-spacing:-.01em;margin:0 0 3px;font-weight:700}
+  .sub{color:var(--muted);font-size:14.5px;margin:0 0 14px}
+  .legend{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:14px}
+  .lg{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);
+    background:#fff;border:1px solid var(--hair);border-radius:20px;padding:5px 12px}
+  .lg i{width:11px;height:11px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.12)}
+  .canvas{background:#fff;border:1px solid var(--hair);border-radius:16px;padding:10px;
+    box-shadow:0 1px 3px rgba(16,24,40,.05)}
+  svg{display:block;width:100%;height:auto}
+  text{font-family:var(--ui)}
+  .foot{color:var(--muted);font-size:13.5px;margin-top:14px;text-align:center}
+  .foot b{color:#0f9d58}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Earnings Extractor — Architecture</h1>
+  <p class="sub">PDF → reviewed Excel. A deterministic pipeline with a few constrained LLM calls — your code drives the order, not the model.</p>
+  <div class="legend">
+    <span class="lg"><i style="background:#efe6ff;border-color:#7c3aed"></i>LLM call</span>
+    <span class="lg"><i style="background:#e3f5ec;border-color:#0f9d58"></i>Deterministic</span>
+    <span class="lg"><i style="background:#fdeccf;border-color:#e08a00"></i>Human gate</span>
+    <span class="lg"><i style="background:#e6efff;border-color:#2563eb"></i>Input / output</span>
+    <span class="lg"><i style="background:#eceef6;border-color:#8a93a6"></i>Support</span>
+  </div>
+  <div class="canvas">
+    <svg id="svg" viewBox="0 0 830 1235" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="sh" x="-20%" y="-30%" width="140%" height="160%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="2.2" flood-color="#0b132633"/>
+        </filter>
+        <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#5b6473"/></marker>
+        <marker id="ahp" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#9b6be6"/></marker>
+      </defs>
+      <g id="edges"></g>
+      <g id="shapes" filter="url(#sh)"></g>
+      <g id="labels"></g>
+    </svg>
+  </div>
+  <div class="foot"><b>15/18 → 18/18</b> after the deterministic layer &nbsp;·&nbsp; Tesla 9/9 · Citi 9/9 &nbsp;·&nbsp; ~3–4 model calls/PDF live &nbsp;·&nbsp; ~cents/PDF</div>
+</div>
+
+<script>
+(function(){
+  const NS='http://www.w3.org/2000/svg';
+  const edges=document.getElementById('edges'),shapes=document.getElementById('shapes'),labels=document.getElementById('labels');
+  const C={ io:{f:'#e6efff',s:'#2563eb'}, det:{f:'#e3f5ec',s:'#0f9d58'},
+    llm:{f:'#efe6ff',s:'#7c3aed'}, human:{f:'#fdeccf',s:'#e08a00'},
+    ext:{f:'#eef0ff',s:'#4f46e5'}, sup:{f:'#eceef6',s:'#8a93a6'} };
+  const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+  function box(n){const c=C[n.type];
+    shapes.appendChild(el('rect',{x:n.x,y:n.y,width:n.w,height:n.h,rx:10,ry:10,fill:c.f,stroke:c.s,'stroke-width':1.5}));
+    const lines=n.lines,size=n.size||15,lh=size*1.2,cx=n.x+n.w/2,cy=n.y+n.h/2;
+    const start=cy-(lines.length-1)*lh/2+size*0.34;
+    lines.forEach((ln,i)=>{const t=el('text',{x:cx,y:start+i*lh,'text-anchor':'middle',
+      'font-size':i===0?size:size-2.5,'font-weight':i===0?600:400,fill:i===0?c.s:'#5b6473'});
+      t.textContent=ln;labels.appendChild(t);});}
+  function arrow(x1,y1,x2,y2,o){o=o||{};const purple=!!o.purple;
+    const a={x1,y1,x2,y2,stroke:purple?'#9b6be6':'#5b6473','stroke-width':o.w||1.7,
+      'stroke-linecap':'round','marker-end':purple?'url(#ahp)':'url(#ah)'};
+    if(o.dash)a['stroke-dasharray']='6 6'; edges.appendChild(el('line',a));}
+  function elabel(x,y,txt,color){const t=el('text',{x,y,'text-anchor':'middle','font-size':12,fill:color||'#8a93a6'});
+    t.textContent=txt;labels.appendChild(t);}
+
+  const CX=330,W=240,LX=210,RX=450;
+  const N={
+    pdf:{x:LX,y:24,w:W,h:56,type:'io',lines:['PDF input','report or transcript']},
+    ing:{x:LX,y:128,w:W,h:64,type:'io',lines:['Ingest & classify','ingest.py · classify.py']},
+    ext:{x:LX,y:240,w:W,h:64,type:'llm',lines:['Extract metrics','extractor.py — value + quote + conf.']},
+    det:{x:LX,y:352,w:W,h:80,type:'det',lines:['Enrich & normalize','identity · capital_return · normalize']},
+    lin:{x:LX,y:480,w:W,h:64,type:'llm',lines:['Line-item correction','line_item_selector.py']},
+    val:{x:LX,y:592,w:W,h:70,type:'det',lines:['Validate & flag','consistency · magnitude · review']},
+    ver:{x:LX,y:710,w:W,h:64,type:'llm',lines:['Verifier (flags only)','verifier.py']},
+    draft:{x:LX,y:822,w:W,h:56,type:'io',lines:['Draft','draft_metrics.json']},
+    rev:{x:LX,y:926,w:W,h:64,type:'human',lines:['Human citation review','review.py — approve / reject']},
+    exp:{x:LX,y:1038,w:W,h:64,type:'det',lines:['Export','export.py — template + tabs']},
+    out:{x:LX,y:1150,w:W,h:58,type:'io',lines:['Outputs','xlsx · json · audit.md']},
+  };
+  const oai={x:600,y:455,w:205,h:150,type:'ext',lines:['OpenAI','Responses API','(live mode)']};
+  const rec={x:24,y:246,w:152,h:52,type:'sup',lines:['recorded.py','cassettes']};
+  const sch={x:24,y:360,w:152,h:60,type:'sup',lines:['schema.py','data contracts']};
+  const evl={x:24,y:824,w:152,h:52,type:'sup',lines:['evaluation/','90% gate']};
+
+  const order=['pdf','ing','ext','det','lin','val','ver','draft','rev','exp','out'];
+  for(let i=0;i<order.length-1;i++){const a=N[order[i]],b=N[order[i+1]];arrow(CX,a.y+a.h,CX,b.y-3,{w:1.8});}
+  arrow(RX,N.ext.y+32,oai.x-3,oai.y+40,{dash:true,purple:true});
+  arrow(RX,N.lin.y+32,oai.x-3,oai.y+75,{dash:true,purple:true});
+  arrow(RX,N.ver.y+32,oai.x-3,oai.y+112,{dash:true,purple:true});
+  elabel(oai.x-52,oai.y-4,'live calls','#9b6be6');
+  arrow(rec.x+rec.w,rec.y+26,LX-3,N.ext.y+32,{dash:true});
+  arrow(sch.x+sch.w,sch.y+30,LX-3,N.det.y+22,{dash:true});
+  arrow(evl.x+evl.w,evl.y+26,LX-3,N.draft.y+28,{dash:true});
+  elabel(rec.x+rec.w+24,rec.y+14,'offline','#8a93a6');
+
+  Object.values(N).forEach(box);box(oai);box(rec);box(sch);box(evl);
+})();
+</script>
+</body>
+</html>

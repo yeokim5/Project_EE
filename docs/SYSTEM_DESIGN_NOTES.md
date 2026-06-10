@@ -119,7 +119,7 @@ Client baseline:
 
 Source: `docs/CLIENT_REPLY.md`.
 
-Measured live sample:
+Measured live sample (main extraction call only):
 
 - PDF: `assesment_info/TSLA-Q2-2025-Update.pdf`.
 - Model: `gpt-5.4-mini`, `OPENAI_REASONING_EFFORT=low`.
@@ -138,10 +138,18 @@ Calculation:
 = $0.013668 per PDF
 ```
 
-That one measured sample is about `244x-366x` cheaper than the confirmed
-`$3.33-$5.00/PDF` analyst baseline. Document length varies, so production should
-track cost per document, but the observed LLM cost is comfortably below the
-manual benchmark.
+That `$0.0137` is the **main extraction call only**. Live mode makes more than
+one model call per document — the main extraction, a live line-item correction
+pass, a live verifier pass, and (only when the buyback cell is weak) a
+capital-return narrative call — roughly **3–4 calls per PDF**. At present only the
+main call's tokens are recorded in `llm_usage`, so the figure above understates
+the full pipeline; a realistic end-to-end cost is on the order of **a few cents
+per PDF** (the extra calls are similar-sized).
+
+Even at that higher, honest number the pipeline is still roughly **two orders of
+magnitude cheaper** than the `$3.33-$5.00/PDF` analyst baseline. The correct
+production fix is to meter *every* model call per document (sum usage across all
+passes) rather than report the first call as the total.
 
 ## Scale Path
 

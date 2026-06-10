@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Earnings Extractor — Architecture</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2b3543;
+    --text:#e6edf3; --muted:#9aa7b4; --accent:#6ea8fe;
+    --llm:#c084fc; --llm-bg:#2a1f3d;
+    --det:#34d399; --det-bg:#10271f;
+    --human:#fbbf24; --human-bg:#2c2410;
+    --io:#60a5fa; --io-bg:#16263f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;padding:28px 18px 80px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 18px;font-size:14px}
+  .summary{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:10px;padding:14px 16px;margin:0 0 20px;font-size:15px}
+  .summary b{color:var(--accent)}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 8px}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);
+    background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:5px 12px}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .d-llm{background:var(--llm)} .d-det{background:var(--det)} .d-human{background:var(--human)} .d-io{background:var(--io)}
+  .controls{margin:14px 0 22px;font-size:13px;color:var(--muted)}
+  .controls label{margin-right:16px;cursor:pointer;user-select:none}
+  .controls input{vertical-align:middle;margin-right:5px}
+
+  .entry{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 6px}
+  .entry .e{font-size:12px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:5px 10px;font-family:ui-monospace,Menlo,monospace;color:var(--muted)}
+  .entry .e.hot{color:var(--text);border-color:var(--accent)}
+  .seclabel{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px}
+
+  .flow{position:relative}
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;
+    overflow:hidden;transition:border-color .15s}
+  .stage:hover{border-color:#3b485a}
+  .stage.llm{border-left:4px solid var(--llm)}
+  .stage.det{border-left:4px solid var(--det)}
+  .stage.human{border-left:4px solid var(--human)}
+  .stage.io{border-left:4px solid var(--io)}
+  .head{display:flex;align-items:center;gap:12px;padding:13px 15px;cursor:pointer}
+  .num{flex:0 0 26px;height:26px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+  .ttl{flex:1;min-width:0}
+  .ttl .t{font-size:15px;font-weight:600}
+  .ttl .f{font-size:12px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;margin-top:2px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .b{font-size:10.5px;font-weight:700;letter-spacing:.04em;border-radius:5px;padding:3px 7px;text-transform:uppercase}
+  .b-llm{background:var(--llm-bg);color:var(--llm)}
+  .b-det{background:var(--det-bg);color:var(--det)}
+  .b-human{background:var(--human-bg);color:var(--human)}
+  .b-io{background:var(--io-bg);color:var(--io)}
+  .b-live{background:#3a1d1d;color:#f87171}
+  .caret{color:var(--muted);font-size:13px;transition:transform .15s}
+  .stage.open .caret{transform:rotate(90deg)}
+  .body{display:none;padding:0 15px 15px 53px;font-size:13.5px}
+  .stage.open .body{display:block}
+  .body .why{color:var(--text);margin:2px 0 10px}
+  .body .why b{color:var(--accent)}
+  .body .fn{color:var(--muted);font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .body .say{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+    margin-top:10px;font-size:13px}
+  .body .say span{color:var(--muted);font-size:11px;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em}
+  .arrow{text-align:center;color:var(--line);font-size:16px;line-height:.6;margin:-4px 0 6px}
+
+  .twin{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+  @media(max-width:680px){.twin{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+  .card h3{margin:0 0 6px;font-size:14px}
+  .card p{margin:0;font-size:13px;color:var(--muted)}
+  .card code{color:var(--text);background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px}
+  .facts{margin-top:22px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+  .facts b{color:var(--det)}
+  .dim{opacity:.32;filter:saturate(.4)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Earnings Extractor — Architecture</h1>
+  <p class="sub">A deterministic pipeline with constrained LLM step(s). Click any stage to expand. Your code controls the order — the model never does.</p>
+
+  <div class="summary">
+    <b>30-sec version:</b> One file reads the PDF, one classifies it, one makes the LLM call to pull numbers with quotes — then several files do the reliable deterministic work (normalize units, validate, flag for review), a human approves, and one file writes the Excel. The order is fixed in <code style="color:var(--accent)">pipeline.py</code>. <b>That's why it's a pipeline, not an agent.</b>
+  </div>
+
+  <div class="legend">
+    <span class="chip"><span class="dot d-llm"></span>LLM call (model reads/judges)</span>
+    <span class="chip"><span class="dot d-det"></span>Deterministic (fixed code)</span>
+    <span class="chip"><span class="dot d-human"></span>Human gate</span>
+    <span class="chip"><span class="dot d-io"></span>I/O</span>
+    <span class="chip"><span class="b b-live" style="padding:2px 6px">LIVE</span>only runs in live mode</span>
+  </div>
+
+  <div class="controls">
+    <label><input type="checkbox" id="fLLM"> highlight LLM calls only</label>
+    <label><input type="checkbox" id="fLive"> highlight live-only passes</label>
+    <label><input type="checkbox" id="fExpand"> expand all</label>
+  </div>
+
+  <div class="seclabel">Entry points · <code style="color:var(--muted)">cli.py</code> — same engine underneath</div>
+  <div class="entry">
+    <span class="e hot">batch</span>
+    <span class="e hot">extract</span>
+    <span class="e">inspect</span>
+    <span class="e">eval</span>
+    <span class="e">review</span>
+    <span class="e">export</span>
+  </div>
+
+  <div class="seclabel">Per-document pipeline · <code style="color:var(--muted)">pipeline.py → process_single_pdf()</code> (fixed order)</div>
+  <div class="flow" id="flow">
+
+    <div class="stage io" data-k="io">
+      <div class="head"><div class="num">1</div>
+        <div class="ttl"><div class="t">Ingest the PDF</div><div class="f">ingest.py · read_pdf_pages, read_pdf_metadata</div></div>
+        <div class="badges"><span class="b b-io">I/O</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Turns the PDF into <b>per-page text + metadata</b> so everything downstream works on text, not the raw file.</div>
+        <div class="say"><span>if asked, say</span>"Reads the PDF into page-by-page text — the input layer for the whole pipeline."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage det" data-k="det">
+      <div class="head"><div class="num">2</div>
+        <div class="ttl"><div class="t">Classify & select pages</div><div class="f">classify.py · classify_document, select_extraction_pages</div></div>
+        <div class="badges"><span class="b b-det">Deterministic</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Decides <b>report vs earnings-call transcript</b> by structure (not keywords) and picks only the pages worth reading, so the model isn't fed the whole filing.</div>
+        <div class="say"><span>why it matters</span>"This is what lets it handle both Tesla's tables and Citi's prose — and it controls cost by not sending every page to the model."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage llm" data-k="llm">
+      <div class="head"><div class="num">3</div>
+        <div class="ttl"><div class="t">LLM extraction — the only model read</div><div class="f">extractor.py · extract_metrics_live_with_usage  |  recorded.py · extract_metrics_recorded</div></div>
+        <div class="badges"><span class="b b-llm">LLM</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">One structured call returns each metric as <b>{value, source_page, source_quote, confidence}</b>. This is the <b>only</b> place the model reads the document. <code style="color:var(--muted)">recorded.py</code> replays saved responses so it runs offline with no API key.</div>
+        <div class="say"><span>if asked, say</span>"The model does only the fuzzy reading — find the number and quote its source. It never decides control flow."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage det" data-k="det">
+      <div class="head"><div class="num">4</div>
+        <div class="ttl"><div class="t">Complete template rows</div><div class="f">validation.py · complete_template_rows</div></div>
+        <div class="badges"><span class="b b-det">Deterministic</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Ensures every required client-template field exists as a row — missing ones become <b>blank + review-flagged</b>, never guessed.</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage det" data-k="det">
+      <div class="head"><div class="num">5</div>
+        <div class="ttl"><div class="t">Resolve company identity</div><div class="f">identity.py · resolve_company_identity, apply_company_identity</div></div>
+        <div class="badges"><span class="b b-det">Deterministic</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Fills company name / ticker from text + metadata when the filing <b>implies rather than labels</b> it — a thing the model routinely leaves blank.</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage det" data-k="det">
+      <div class="head"><div class="num">6</div>
+        <div class="ttl"><div class="t">Capital-return (buybacks &amp; dividends)</div><div class="f">validation.enrich_capital_return_text · capital_return.resolve_capital_return_narrative</div></div>
+        <div class="badges"><span class="b b-det">Deterministic</span><span class="b b-llm">LLM</span><span class="b b-live">LIVE</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Builds the combined "Buybacks and dividends" field from the source text. Deterministic first; <b>only if the cell is weak</b> does a live model call phrase it — and the number is checked against the source. Stays review-flagged.</div>
+        <div class="say"><span>note</span>"This is one of the extra live calls — part of why live mode isn't a single call."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage det" data-k="det">
+      <div class="head"><div class="num">7</div>
+        <div class="ttl"><div class="t">Normalize units &amp; scale</div><div class="f">validation.repair_table_scale · normalize.py · normalize_metrics, normalize_currency_to_usd_millions</div></div>
+        <div class="badges"><span class="b b-det">Deterministic</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Converts everything to one canonical form: <b>USD millions</b>, gross margin as percentage points, EPS as a plain number. Uses the quote's explicit amount to avoid double-scaling.</div>
+        <div class="say"><span>the money line</span>"This turns Citi's '$21.6 billion' into the right number — a 1000× error the model can't be trusted to get. It's the biggest reason the deterministic layer takes raw 15/18 → 18/18."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage llm" data-k="llm">
+      <div class="head"><div class="num">8</div>
+        <div class="ttl"><div class="t">Line-item correction</div><div class="f">line_item_selector.py · apply_line_item_selection</div></div>
+        <div class="badges"><span class="b b-llm">LLM</span><span class="b b-live">LIVE</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">If the model grabbed a line <b>adjacent in meaning</b> (a revenue subtotal instead of total revenue), this re-selects the definition-matching line from the cited page. Caged so the value stays grounded.</div>
+        <div class="say"><span>note</span>"A separate live model call — the generalizing fix for wrong-line picks."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage det" data-k="det">
+      <div class="head"><div class="num">9</div>
+        <div class="ttl"><div class="t">Repair source pages</div><div class="f">validation.py · repair_source_pages</div></div>
+        <div class="badges"><span class="b b-det">Deterministic</span><span class="b b-live">LIVE</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Live extractions can mis-cite a page; this <b>snaps each quote to the page that actually contains it</b> before the citation validator runs.</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage det" data-k="det">
+      <div class="head"><div class="num">10</div>
+        <div class="ttl"><div class="t">Validate — consistency, magnitude, review flags</div><div class="f">validation.py · validate_metrics, check_free_cash_flow, check_value_magnitudes</div></div>
+        <div class="badges"><span class="b b-det">Deterministic</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">The reliability gate: quote must exist on the cited page, the number must appear in its quote, consistency holds (OCF − capex = FCF), magnitudes are sane (net income ≤ revenue). Anything off gets <b>needs_review = true</b> with a plain-English reason.</div>
+        <div class="say"><span>if asked, say</span>"Validation never edits a value — it only flags it for a human, with the reason."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage llm" data-k="llm">
+      <div class="head"><div class="num">11</div>
+        <div class="ttl"><div class="t">LLM verifier (safety net)</div><div class="f">verifier.py · verify_template_metrics</div></div>
+        <div class="badges"><span class="b b-llm">LLM</span><span class="b b-live">LIVE</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">On live runs, the model re-checks each populated value against its quote and <b>flags</b> semantic errors deterministic rules can't enumerate (wrong line item, full-year vs the quarter). It only adds flags — <b>never edits a value</b>.</div>
+        <div class="say"><span>note</span>"The 3rd/4th live call. Add-flags-only keeps it safe; recorded mode skips it to stay byte-for-byte reproducible."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage io" data-k="io">
+      <div class="head"><div class="num">12</div>
+        <div class="ttl"><div class="t">Assemble draft</div><div class="f">pipeline.py · build_draft_run → draft_metrics.json</div></div>
+        <div class="badges"><span class="b b-io">I/O</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Writes the draft run: normalized rows, evidence, validation flags, and token usage. Inputs to review — <b>not</b> the final client Excel.</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage human" data-k="human">
+      <div class="head"><div class="num">13</div>
+        <div class="ttl"><div class="t">Human citation review</div><div class="f">review.py · build_review_items, write_review_artifacts, load_review_decisions</div></div>
+        <div class="badges"><span class="b b-human">Human gate</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Shows every value with its page, quote, confidence, and flag reason, and records <b>approve / reject / note</b>. (The web UI is the nicer version of this surface.)</div>
+        <div class="say"><span>the headline</span>"Nothing reaches the client sheet until a human approves the citation behind it."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage io" data-k="io">
+      <div class="head"><div class="num">14</div>
+        <div class="ttl"><div class="t">Export the workbook</div><div class="f">export.py · export_reviewed_run, map_metric_to_client_cell, format_*</div></div>
+        <div class="badges"><span class="b b-io">I/O</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Writes <code style="color:var(--muted)">extractions.xlsx</code>: client-template first sheet + Metrics / Review / Evidence tabs, formatting each cell ($&lt;n&gt;B strings, margin as decimal). <b>Only approved values land in the client sheet</b>; unsupported cells stay blank.</div></div>
+    </div>
+
+  </div>
+
+  <div class="seclabel">How a user upload actually enters the pipeline · <code style="color:var(--muted)">api/extract.py · api/process.py</code></div>
+  <div class="summary" style="border-left-color:var(--io)">
+    <b style="color:var(--io)">The web path:</b> the browser (<code style="color:var(--muted)">app/page.tsx</code>) POSTs the PDF as <code style="color:var(--muted)">multipart/form-data</code>. The serverless handler does NOT re-implement anything — it unpacks the file, writes it to a temp <code>.pdf</code>, and hands off to the exact same <code style="color:var(--accent)">pipeline.extract()</code> the CLI uses. <b>One engine, two front doors (CLI + web).</b>
+  </div>
+  <div class="flow" id="webflow">
+
+    <div class="stage io" data-k="io">
+      <div class="head"><div class="num">A</div>
+        <div class="ttl"><div class="t">Receive &amp; unpack the upload</div><div class="f">api/extract.py · do_POST → _read_request → _read_multipart</div></div>
+        <div class="badges"><span class="b b-io">I/O</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Parses the multipart body and pulls out <b>{filename, file_bytes}</b> (the raw PDF bytes). Recorded/demo mode instead picks a bundled golden PDF (<code style="color:var(--muted)">tesla</code>/<code style="color:var(--muted)">citi</code>) — no upload needed.</div>
+        <div class="say"><span>nuance</span>"<code>api/process.py</code> is the same but also builds the Excel; <code>api/extract.py</code> returns metrics-only for the preview."</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage io" data-k="io">
+      <div class="head"><div class="num">B</div>
+        <div class="ttl"><div class="t">Write bytes to a temp PDF</div><div class="f">api/extract.py · _process → _write_input_pdf</div></div>
+        <div class="badges"><span class="b b-io">I/O</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why">Sanitizes the filename, writes <code>file_bytes</code> into a <code>TemporaryDirectory</code> as a real <code>.pdf</code>, and returns a <code>pdf_path</code>. From here on it's identical to a CLI run on a local file.</div></div>
+    </div>
+    <div class="arrow">▼</div>
+
+    <div class="stage det" data-k="det">
+      <div class="head"><div class="num">C</div>
+        <div class="ttl"><div class="t">Hand off to the shared engine</div><div class="f">pipeline.extract() → process_single_pdf()  →  (stages 1–14 below)</div></div>
+        <div class="badges"><span class="b b-det">Same pipeline</span><span class="caret">▶</span></div>
+      </div>
+      <div class="body"><div class="why"><code>extract()</code> finds the PDF(s), runs <b>process_single_pdf</b> (the fixed 14-stage sequence above), and writes <code>draft_metrics.json</code>. The web handler then reads that draft back and — in <code>process.py</code> — auto-approves &amp; calls <code>export_reviewed_run</code> to return a base64 Excel.</div>
+        <div class="say"><span>the point</span>"The web layer is a thin adapter. All the logic lives in the one pipeline — that's why CLI and web can't drift apart."</div></div>
+    </div>
+
+  </div>
+
+  <div class="seclabel">What the data actually looks like at each hop (the shapes)</div>
+  <div class="summary" style="border-left-color:var(--det)">
+    <b style="color:var(--det)">Clears up the #1 confusion:</b> ingest reads <b>every</b> page → classify runs on all pages but its verdict is <b>overridden to <code>"earnings_report"</code></b> (audit-only) → <code>select_extraction_pages</code> picks ≤6 pages → <b>the model only ever sees those 6 pages</b>, not classify's output. After the one model call, every later stage mutates the same <code>list[MetricRow]</code> in place.
+  </div>
+  <div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:4px">
+    <thead><tr style="text-align:left;color:var(--muted)">
+      <th style="padding:8px 10px;border-bottom:1px solid var(--line)">Hop</th>
+      <th style="padding:8px 10px;border-bottom:1px solid var(--line)">Function</th>
+      <th style="padding:8px 10px;border-bottom:1px solid var(--line)">In → Out (data shape)</th>
+    </tr></thead>
+    <tbody style="color:var(--text)">
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">Upload</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:ui-monospace,Menlo,monospace;color:var(--muted)">_read_multipart</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">HTTP body → <code>{filename, file_bytes}</code> → temp <code>pdf_path</code></td>
+      </tr>
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">1 · ingest</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:ui-monospace,Menlo,monospace;color:var(--muted)">read_pdf_pages</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>pdf_path</code> → <code>list[PageText]</code> &nbsp;<span style="color:var(--muted)">(ALL pages: page_number, text, char_count)</span></td>
+      </tr>
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">2a · classify</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:ui-monospace,Menlo,monospace;color:var(--muted)">classify_document</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>list[PageText]</code> → <code>DocumentClassification</code> &nbsp;<span style="color:var(--human)">⚠ verdict overridden to "earnings_report"</span></td>
+      </tr>
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">2b · select</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:ui-monospace,Menlo,monospace;color:var(--muted)">select_extraction_pages</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>list[PageText]</code> → <code>≤6 PageText</code> &nbsp;<span style="color:var(--muted)">(page 1 + highest _page_relevance)</span></td>
+      </tr>
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">3 · extract <span class="b b-llm" style="padding:1px 5px">LLM</span></td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:ui-monospace,Menlo,monospace;color:var(--muted)">extract_metrics_live_with_usage</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>≤6 PageText</code> → <code>MetricsBatch</code> = <code>list[MetricRow]</code> &nbsp;<span style="color:var(--muted)">{value, source_page, source_quote, confidence}</span></td>
+      </tr>
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">4–11</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:ui-monospace,Menlo,monospace;color:var(--muted)">complete / identity / normalize / validate …</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><b>same <code>list[MetricRow]</code> mutated in place</b> — units fixed, rows completed, <code>needs_review</code> set</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">12 · assemble</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:ui-monospace,Menlo,monospace;color:var(--muted)">build_draft_run</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>list[MetricRow]</code> → <code>DraftRun</code> → <code>draft_metrics.json</code></td>
+      </tr>
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)">13–14</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:ui-monospace,Menlo,monospace;color:var(--muted)">review → export_reviewed_run</td>
+        <td style="padding:8px 10px;border-bottom:1px solid var(--line)"><code>DraftRun</code> + decisions → <code>extractions.xlsx</code> &nbsp;<span style="color:var(--muted)">(only approved cells)</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="seclabel">Cross-cutting (not stages — they support every step)</div>
+  <div class="twin">
+    <div class="card"><h3>schema.py — data contracts</h3><p>Typed shapes (Pydantic) for metric rows &amp; draft runs. <code>repair_metric_batch</code> rejects/repairs malformed model JSON so bad output never flows downstream.</p></div>
+    <div class="card"><h3>recorded.py — offline mode</h3><p>Replays committed model responses from <code>recorded_responses/</code> so reviewers (and the eval) run with no API key, deterministically.</p></div>
+    <div class="card"><h3>evaluation/ — the gate</h3><p><code>golden_metrics</code>, <code>scoring</code>, <code>tolerances</code>. Golden values live <b>only</b> here; a test blocks the extractor from importing them. This is the 90% gate.</p></div>
+    <div class="card"><h3>Two entry points, one engine</h3><p><code>batch</code> = folder → one workbook, skips bad files, stamped DRAFT/UNREVIEWED. <code>extract→review→export</code> = the rigorous human-gated path. Both call <code>process_single_pdf</code>.</p></div>
+  </div>
+
+  <div class="facts">
+    <b>Live mode = ~3–4 model calls / PDF:</b> extraction (3) + line-item (8) + verifier (11) + sometimes capital-return (6). Everything else is deterministic. &nbsp;·&nbsp;
+    Recorded eval: <b>Tesla 9/9, Citi 9/9</b> &nbsp;·&nbsp; deterministic layer: raw <b>15/18 → 18/18</b> &nbsp;·&nbsp; cost: a few cents/PDF, ~100×+ cheaper than analysts.
+  </div>
+</div>
+
+<script>
+  const flow = document.getElementById('flow');
+  document.querySelectorAll('#flow .stage, #webflow .stage').forEach(s=>{
+    s.querySelector('.head').addEventListener('click',()=>s.classList.toggle('open'));
+  });
+  const fLLM=document.getElementById('fLLM'), fLive=document.getElementById('fLive'), fExpand=document.getElementById('fExpand');
+  function applyFilter(){
+    const onlyLLM=fLLM.checked, onlyLive=fLive.checked;
+    flow.querySelectorAll('.stage').forEach(s=>{
+      let dim=false;
+      if(onlyLLM && !s.classList.contains('llm')) dim=true;
+      if(onlyLive && !s.querySelector('.b-live')) dim=true;
+      s.classList.toggle('dim',dim);
+    });
+  }
+  fLLM.addEventListener('change',applyFilter);
+  fLive.addEventListener('change',applyFilter);
+  fExpand.addEventListener('change',()=>{
+    document.querySelectorAll('#flow .stage, #webflow .stage').forEach(s=>s.classList.toggle('open',fExpand.checked));
+  });
+</script>
+</body>
+</html>

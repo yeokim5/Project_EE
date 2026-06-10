@@ -367,12 +367,23 @@ they are already included in `output_tokens`.
 Client baseline from `docs/CLIENT_REPLY.md`: analysts cost about `$50/hour` and
 process `10–15 PDFs/hour`, or roughly `$3.33–$5.00/PDF`.
 
-Measured live run on `TSLA-Q2-2025-Update.pdf` with `gpt-5.4-mini`: `6,422` input
+**Main extraction call.** Measured live run on `TSLA-Q2-2025-Update.pdf` with
+`gpt-5.4-mini`: `6,422` input + `1,967` output tokens at `$0.75 / 1M` input and
+`$4.50 / 1M` output ≈ **`$0.0137`** for that one call.
 
-- `1,967` output tokens at `$0.75 / 1M` input and `$4.50 / 1M` output, for about
-`**$0.0137/PDF**` — roughly `244×–366×` cheaper than the analyst baseline before
-routine local compute. Document length varies, so this is a sample, not a
-universal average.
+**Full live pipeline cost is higher than that single call.** Live mode makes
+more than one model call per document: the main extraction, a live line-item
+correction pass, a live verifier pass, and (only when the buyback cell is weak) a
+capital-return narrative call — so roughly **3–4 model calls per PDF**. Today
+only the main extraction call's tokens are captured in `llm_usage`, so the
+`$0.0137` figure reflects that call alone, not the whole pipeline. A realistic
+full-pipeline cost is on the order of **a few cents per PDF** (the extra calls are
+similar-sized).
+
+Even at the high end, that is still roughly **two orders of magnitude cheaper**
+than the `$3.33–$5.00/PDF` analyst baseline. Document length and the number of
+triggered passes vary, so production should meter *every* model call per document
+rather than rely on this sample.
 
 ---
 
